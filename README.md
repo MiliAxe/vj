@@ -1,26 +1,46 @@
 <div align="center">
 
-#  `vj`
+# `vj`
 
 ### *Minimal, Ultra-Compressed & Secure Video Journaling for Hackers*
 
 [![Made with AI](https://img.shields.io/badge/Made%20with-AI-lightgrey?style=for-the-badge)](https://github.com/mefengl/made-by-ai)
 
-This project is inspired by the King himself, [Terry A. Davis](https://en.wikipedia.org/wiki/Terry_A._Davis) (RIP). I noticed that he had most of his career and life on tape. I thought to myself, maybe it would be nice to have a utility to record your journal entries talking. Not a bad idea huh? This tool was made with AI (Sorry Terry, you probably wouldn't probably like me writing a tool like this using AI).
+This project is inspired by the King himself, [Terry A. Davis](https://en.wikipedia.org/wiki/Terry_A._Davis) (RIP). I noticed that he had most of his career and life on tape. I thought to myself, maybe it would be nice to have a utility to record your journal entries talking. Not a bad idea huh? This tool was made with AI (Sorry Terry, you probably wouldn't like me writing a tool like this using AI).
 
 </div>
 
 ---
 
+## Installation
+
+`vj` includes a `Makefile` that installs the executable and configures shell completions for **Fish**, **Bash**, and **Zsh**:
+
+```bash
+# User install to ~/.local/bin and shell completion directories
+make install
+
+# System-wide install
+sudo make install PREFIX=/usr/local
+```
+
+To uninstall:
+
+```bash
+make uninstall
+```
+
+---
+
 ## Features
 
-- ️**Ultra-Compact SVT-AV1 + Opus**: Compress hours of speech video into negligible disk space (~15 MB per hour in `terry` mode).
--  **Zero-Disk-Leak RAM Streaming**: Encrypted videos pipe directly through RAM into `mpv` (`gpg -d | mpv -`) without writing plaintext to disk.
--  **Zero-Friction Recording**: Run `vj record` and close preview to save. Background encoding runs silently via `ionice`/`nice`.
--  **Native Jalali (Solar Hijri) & Gregorian**: Seamless calendar timestamps using native Linux `jdate`.
-- ️**Vim-First `fzf` Browser**: Interactive browsing with live metadata & markdown thought note preview panes.
--  **Auto Shell Completions**: Full tab completion for **Fish**, **Bash**, and **Zsh**.
-- ️**XDG Standard Configuration**: Clean configuration located at `~/.config/vj/config.env`.
+- **Ultra-Compact SVT-AV1 + Opus**: Compress hours of speech video into negligible disk space (~15 MB per hour in `terry` mode).
+- **Zero-Disk-Leak RAM Streaming**: Encrypted videos pipe directly through RAM into `mpv` (`gpg -d | mpv -`) without writing plaintext to disk.
+- **Zero-Friction Recording**: Run `vj record` and close preview to save. Background encoding runs silently via `ionice`/`nice`.
+- **Native Jalali (Solar Hijri) & Gregorian**: Seamless calendar timestamps using native Linux `jdate`.
+- **Vim-First `fzf` Browser**: Interactive browsing with live metadata & markdown thought note preview panes.
+- **Auto Shell Completions**: Embedded completions for Fish, Bash, and Zsh.
+- **XDG Standard Configuration**: Clean configuration located at `~/.config/vj/config.env`.
 
 ---
 
@@ -45,7 +65,7 @@ vj stats
 
 ---
 
-##  Command Reference
+## Command Reference
 
 | Command | Description | Example |
 | :--- | :--- | :--- |
@@ -67,7 +87,7 @@ vj stats
 
 ---
 
-##  Compression Profiles
+## Compression Profiles
 
 | Profile | Resolution & FPS | Video Codec & CRF | Audio Codec & Bitrate | Approx. Size |
 | :--- | :--- | :--- | :--- | :--- |
@@ -77,7 +97,7 @@ vj stats
 
 ---
 
-##  Configuration
+## Configuration
 
 Configuration is stored at [`~/.config/vj/config.env`](file:///home/mili/.config/vj/config.env):
 
