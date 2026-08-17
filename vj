@@ -1,0 +1,852 @@
+#!/usr/bin/env bash
+
+# ==============================================================================
+#  vj - Fast, Minimal CLI Video Journal
+# ==============================================================================
+
+set -eo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE_DIR="${SCRIPT_DIR}"
+
+# XDG Base Directory specification compliance
+XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+CONFIG_DIR="${XDG_CONFIG_HOME}/vj"
+CONFIG_FILE="${CONFIG_DIR}/config.env"
+
+# Resolution order:
+# 1. ~/.config/vj/config.env
+# 2. ~/.config/vj/config
+# 3. Fallback to legacy ~/.config/diary/config.env or ./config.env
+if [ -f "${CONFIG_DIR}/config.env" ]; then
+  CONFIG_FILE="${CONFIG_DIR}/config.env"
+elif [ -f "${CONFIG_DIR}/config" ]; then
+  CONFIG_FILE="${CONFIG_DIR}/config"
+elif [ -f "${XDG_CONFIG_HOME}/diary/config.env" ]; then
+  CONFIG_FILE="${XDG_CONFIG_HOME}/diary/config.env"
+elif [ -f "${BASE_DIR}/config.env" ]; then
+  CONFIG_FILE="${BASE_DIR}/config.env"
+fi
+
+mkdir -p "${CONFIG_DIR}"
+
+# Load config if present
+if [ -f "${CONFIG_FILE}" ]; then
+  # shellcheck source=/dev/null
+  source "${CONFIG_FILE}"
+fi
+
+# Expand paths
+eval "ENTRIES_DIR=\"${JOURNAL_DIR:-${ENTRIES_DIR:-${BASE_DIR}/entries}}\""
+eval "KEY_FILE=\"${KEY_FILE:-}\""
+TEMP_DIR="${TEMP_DIR:-/tmp/vj_temp}"
+
+# Configuration Defaults
+CAMERA_DEV="${CAMERA_DEV:-/dev/video0}"
+AUDIO_SRC="${AUDIO_SRC:-default}"
+DEFAULT_PROFILE="${DEFAULT_PROFILE:-terry}"
+AUTO_ENCRYPT="${AUTO_ENCRYPT:-false}"
+DATE_CALENDAR="${DATE_CALENDAR:-jalali}" # 'jalali' or 'gregorian'
+EDITOR="${EDITOR:-nvim}"
+if ! command -v "${EDITOR}" &>/dev/null; then
+  EDITOR="vim"
+fi
+
+mkdir -p "${ENTRIES_DIR}" "${TEMP_DIR}"
+
+# Helper: Timestamp generator using native jdate or standard date
+get_timestamp() {
+  if [ "${DATE_CALENDAR}" = "jalali" ] || [ "${USE_JALALI:-false}" = "true" ]; then
+    if command -v jdate &>/dev/null; then
+      jdate +"%Y-%m-%d_%H-%M-%S"
+    else
+      python3 -c "
+import datetime
+def g2j(gy, gm, gd):
+    g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
+    gy2 = gy if gm > 2 else gy - 1
+    days = 355666 + (365 * gy) + ((gy2 + 3) // 4) - ((gy2 + 99) // 100) + ((gy2 + 399) // 400) + gd + g_d_m[gm - 1]
+    jy = -1595 + (33 * (days // 12053))
+    days %= 12053
+    jy += 4 * (days // 1461)
+    days %= 1461
+    if days > 365:
+        jy += (days - 1) // 365
+        days = (days - 1) % 365
+    if days < 186:
+        jm = 1 + (days // 31)
+        jd = 1 + (days % 31)
+    else:
+        jm = 7 + ((days - 186) // 30)
+        jd = 1 + ((days - 186) % 30)
+    return jy, jm, jd
+
+now = datetime.datetime.now()
+jy, jm, jd = g2j(now.year, now.month, now.day)
+print(f'{jy:04d}-{jm:02d}-{jd:02d}_{now.strftime(\"%H-%M-%S\")}')
+"
+    fi
+  else
+    date +"%Y-%m-%d_%H-%M-%S"
+  fi
+}
+
+# Helper: GPG Arguments for Passphrase/Keyfile handling
+get_gpg_auth_flags() {
+  if [ -n "${KEY_FILE}" ] && [ -f "${KEY_FILE}" ]; then
+    echo "--pinentry-mode loopback --passphrase-file ${KEY_FILE}"
+  elif [ -n "${VJ_PASSPHRASE:-${DIARY_PASSPHRASE:-}}" ]; then
+    echo "--pinentry-mode loopback --passphrase ${VJ_PASSPHRASE:-${DIARY_PASSPHRASE}}"
+  else
+    echo ""
+  fi
+}
+
+# Profile specifications
+get_profile_params() {
+  local profile="$1"
+  case "${profile}" in
+    terry)
+      # Ultra-efficient retro mode: 640x480, 24fps, SVT-AV1 CRF 34, Opus 20k mono speech
+      echo "640x480 24 libsvtav1 4 34 libopus 1 20k hqdn3d=2:1.5:3:2.5"
+      ;;
+    balanced)
+      # Crisp 720p speech & cam: 1280x720, 25fps, SVT-AV1 CRF 28, Opus 48k stereo
+      echo "1280x720 25 libsvtav1 6 28 libopus 2 48k hqdn3d=1:1:2:2"
+      ;;
+    hq)
+      # High-def archival: 1920x1080, 30fps, SVT-AV1 CRF 22, Opus 96k stereo
+      echo "1920x1080 30 libsvtav1 6 22 libopus 2 96k null"
+      ;;
+    *)
+      echo "640x480 24 libsvtav1 4 34 libopus 1 20k hqdn3d=2:1.5:3:2.5"
+      ;;
+  esac
+}
+
+# Auto migrate legacy files if any
+migrate_legacy_files() {
+  local loose_files
+  shopt -s nullglob
+  loose_files=("${BASE_DIR}"/entry_*.mkv "${BASE_DIR}"/entry_*.mkv.gpg)
+  shopt -u nullglob
+
+  if [ ${#loose_files[@]} -gt 0 ]; then
+    for f in "${loose_files[@]}"; do
+      local bname
+      bname=$(basename "$f")
+      local stamp
+      stamp=$(echo "$bname" | sed -E 's/^entry_([0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}-[0-9]{2}-[0-9]{2}).*/\1/')
+      if [ -n "$stamp" ]; then
+        local entry_folder="${ENTRIES_DIR}/${stamp}"
+        mkdir -p "${entry_folder}"
+        if [[ "$bname" == *.gpg ]]; then
+          mv "$f" "${entry_folder}/video.mkv.gpg"
+        else
+          mv "$f" "${entry_folder}/video.mkv"
+        fi
+        
+        if [ ! -f "${entry_folder}/meta.json" ] && [ ! -f "${entry_folder}/meta.json.gpg" ]; then
+          cat <<EOF > "${entry_folder}/meta.json"
+{
+  "timestamp": "${stamp}",
+  "profile": "legacy",
+  "tags": ["migrated"],
+  "title": "Migrated Entry ${stamp}"
+}
+EOF
+        fi
+      fi
+    done
+  fi
+}
+
+# --- Command: Record ---
+cmd_record() {
+  local profile="${DEFAULT_PROFILE}"
+  local do_encrypt="${AUTO_ENCRYPT}"
+  local custom_title=""
+  local custom_tags=""
+  local verbose=false
+  local open_note=false
+  local interactive=false
+
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -p|--profile)
+        profile="$2"
+        shift 2
+        ;;
+      -e|--encrypt)
+        do_encrypt="true"
+        shift
+        ;;
+      --no-encrypt)
+        do_encrypt="false"
+        shift
+        ;;
+      -t|--title)
+        custom_title="$2"
+        shift 2
+        ;;
+      --tags)
+        custom_tags="$2"
+        shift 2
+        ;;
+      -n|--note)
+        open_note=true
+        shift
+        ;;
+      -i|--interactive)
+        interactive=true
+        shift
+        ;;
+      -v|--verbose)
+        verbose=true
+        shift
+        ;;
+      terry|balanced|hq)
+        profile="$1"
+        shift
+        ;;
+      *)
+        shift
+        ;;
+    esac
+  done
+
+  local params
+  params=$(get_profile_params "${profile}")
+  local res fps vcodec vpreset vcrf acodec achannels abitrate vfilter
+  read -r res fps vcodec vpreset vcrf acodec achannels abitrate vfilter <<< "${params}"
+
+  local timestamp
+  timestamp=$(get_timestamp)
+  local entry_folder="${ENTRIES_DIR}/${timestamp}"
+  local temp_raw="${TEMP_DIR}/raw_${timestamp}.mkv"
+  local final_out="${entry_folder}/video.mkv"
+  local meta_file="${entry_folder}/meta.json"
+  local note_file="${entry_folder}/note.md"
+
+  mkdir -p "${entry_folder}"
+
+  local log_opt="-loglevel error"
+  local play_log="-loglevel quiet -nostats"
+  if [ "${verbose}" = "true" ]; then
+    log_opt="-loglevel info"
+    play_log="-loglevel info"
+  fi
+
+  echo "Recording [${profile}: ${res}@${fps}fps] -> ${timestamp} (Close preview or press 'q' to stop)"
+
+  # Step 1: Capture with live preview
+  if [ "${verbose}" = "true" ]; then
+    ffmpeg -hide_banner ${log_opt} \
+      -f v4l2 -framerate "${fps}" -video_size "${res}" -i "${CAMERA_DEV}" \
+      -f pulse -i "${AUDIO_SRC}" \
+      -filter_complex "[0:v]split=2[rec_v][preview_v]" \
+      -map "[rec_v]" -map 1:a \
+      -c:v libx264 -preset ultrafast -crf 17 \
+      -c:a pcm_s16le \
+      "${temp_raw}" \
+      -map "[preview_v]" -c:v rawvideo -pix_fmt yuv420p -f nut - |
+      ffplay -hide_banner ${play_log} -window_title "vj recording (${timestamp})" -f nut - || true
+  else
+    ffmpeg -hide_banner -loglevel quiet \
+      -f v4l2 -framerate "${fps}" -video_size "${res}" -i "${CAMERA_DEV}" \
+      -f pulse -i "${AUDIO_SRC}" \
+      -filter_complex "[0:v]split=2[rec_v][preview_v]" \
+      -map "[rec_v]" -map 1:a \
+      -c:v libx264 -preset ultrafast -crf 17 \
+      -c:a pcm_s16le \
+      "${temp_raw}" \
+      -map "[preview_v]" -c:v rawvideo -pix_fmt yuv420p -f nut - 2>/dev/null |
+      ffplay -hide_banner -loglevel quiet -nostats -window_title "vj recording (${timestamp})" -f nut - 2>/dev/null || true
+  fi
+
+  if [ ! -f "${temp_raw}" ] || [ ! -s "${temp_raw}" ]; then
+    echo "Recording cancelled or no data captured."
+    rm -rf "${entry_folder}"
+    return 1
+  fi
+
+  echo "Capture finished."
+
+  # Step 2: Metadata & Notes Handling
+  if [ "${interactive}" = "true" ] && [ -t 0 ]; then
+    read -r -p "Title [press enter for default]: " custom_title
+    read -r -p "Tags (comma-separated, optional): " custom_tags
+    read -r -p "Write note in ${EDITOR}? [y/N]: " note_resp
+    if [[ "${note_resp}" =~ ^[Yy]$ ]]; then
+      open_note=true
+    fi
+  fi
+
+  if [ -z "${custom_title}" ]; then
+    custom_title="Entry ${timestamp}"
+  fi
+
+  local tags_json="[]"
+  if [ -n "${custom_tags}" ]; then
+    IFS=',' read -ra ADDR <<< "${custom_tags}"
+    local formatted_tags=()
+    for t in "${ADDR[@]}"; do
+      trimmed=$(echo "$t" | xargs)
+      formatted_tags+=("\"${trimmed}\"")
+    done
+    tags_json="[$(IFS=,; echo "${formatted_tags[*]}")]"
+  fi
+
+  # Open note editor if requested via flag or interactive
+  if [ "${open_note}" = "true" ]; then
+    cat <<EOF > "${note_file}"
+# ${custom_title}
+*Date: ${timestamp}*
+*Tags: ${custom_tags}*
+
+EOF
+    "${EDITOR}" "${note_file}"
+  fi
+
+  # Metadata
+  cat <<EOF > "${meta_file}"
+{
+  "timestamp": "${timestamp}",
+  "calendar": "${DATE_CALENDAR}",
+  "title": "${custom_title}",
+  "profile": "${profile}",
+  "resolution": "${res}",
+  "fps": ${fps},
+  "tags": ${tags_json},
+  "encrypted": false
+}
+EOF
+
+  # Step 3: Background Compression + Encryption
+  local gpg_auth
+  gpg_auth=$(get_gpg_auth_flags)
+
+  (
+    local vf_arg=""
+    if [ "${vfilter}" != "null" ]; then
+      vf_arg="-vf ${vfilter}"
+    fi
+
+    # Suppress all SVT-AV1 / ffmpeg stdout & stderr completely in subshell
+    nice -n 19 ionice -c 3 ffmpeg -hide_banner -loglevel quiet \
+      -i "${temp_raw}" \
+      ${vf_arg} \
+      -c:v "${vcodec}" -preset "${vpreset}" -crf "${vcrf}" -g 240 -pix_fmt yuv420p \
+      -c:a "${acodec}" -ac "${achannels}" -b:a "${abitrate}" -application voip \
+      "${final_out}" >/dev/null 2>&1 && rm -f "${temp_raw}"
+
+    if [ "${do_encrypt}" = "true" ]; then
+      # Encrypt video
+      # shellcheck disable=SC2086
+      gpg --batch --yes ${gpg_auth} --symmetric --cipher-algo AES256 "${final_out}" >/dev/null 2>&1 && rm -f "${final_out}"
+      
+      # Encrypt note if present
+      if [ -f "${note_file}" ]; then
+        # shellcheck disable=SC2086
+        gpg --batch --yes ${gpg_auth} --symmetric --cipher-algo AES256 "${note_file}" >/dev/null 2>&1 && rm -f "${note_file}"
+      fi
+
+      # Update metadata
+      sed -i 's/"encrypted": false/"encrypted": true/' "${meta_file}"
+      # shellcheck disable=SC2086
+      gpg --batch --yes ${gpg_auth} --symmetric --cipher-algo AES256 "${meta_file}" >/dev/null 2>&1 && rm -f "${meta_file}"
+    fi
+
+    notify-send "vj" "Finished encoding entry: ${timestamp}" 2>/dev/null || true
+  ) >/dev/null 2>&1 &
+
+  disown
+  echo "Encoding in background (PID: $!). Entry saved to ${entry_folder}"
+}
+
+# --- Command: List entries ---
+cmd_list() {
+  migrate_legacy_files
+  local quiet=false
+  if [ "${1:-}" = "-q" ] || [ "${1:-}" = "--quiet" ]; then
+    quiet=true
+  fi
+
+  shopt -s nullglob
+  local dirs=("${ENTRIES_DIR}"/*)
+  shopt -u nullglob
+
+  if [ ${#dirs[@]} -eq 0 ]; then
+    if [ "${quiet}" = "false" ]; then
+      echo "No entries found in ${ENTRIES_DIR}"
+    fi
+    return 0
+  fi
+
+  IFS=$'\n' sorted_dirs=($(sort -r <<<"${dirs[*]}"))
+  unset IFS
+
+  if [ "${quiet}" = "false" ]; then
+    printf "%-22s %-10s %-8s %-32s %s\n" "ID / TIMESTAMP" "STATUS" "SIZE" "TITLE" "TAGS"
+    printf "%-22s %-10s %-8s %-32s %s\n" "----------------------" "----------" "--------" "--------------------------------" "----------------"
+  fi
+
+  for d in "${sorted_dirs[@]}"; do
+    if [ -d "$d" ]; then
+      local stamp
+      stamp=$(basename "$d")
+      if [ "${quiet}" = "true" ]; then
+        echo "${stamp}"
+        continue
+      fi
+
+      local status="[RAW]"
+      local vfile="${d}/video.mkv"
+      if [ -f "${d}/video.mkv.gpg" ]; then
+        status="[GPG]"
+        vfile="${d}/video.mkv.gpg"
+      fi
+
+      local title="Entry ${stamp}"
+      local tags=""
+      if [ -f "${d}/meta.json" ]; then
+        local t_val
+        t_val=$(grep -o '"title": *"[^"]*"' "${d}/meta.json" | cut -d'"' -f4 || true)
+        if [ -n "$t_val" ]; then title="$t_val"; fi
+        tags=$(grep -o '"tags": *\[[^]]*\]' "${d}/meta.json" | sed 's/"tags": *//' || true)
+      fi
+
+      local size_hr="0B"
+      if [ -f "$vfile" ]; then
+        size_hr=$(du -h "$vfile" | cut -f1)
+      elif [ -f "${TEMP_DIR}/raw_${stamp}.mkv" ]; then
+        size_hr="(enc...)"
+      fi
+
+      printf "%-22s %-10s %-8s %-32s %s\n" "${stamp}" "${status}" "${size_hr}" "${title}" "${tags}"
+    fi
+  done
+}
+
+# --- Helper: Preview single entry (used by fzf) ---
+cmd_preview() {
+  local stamp="$1"
+  local d="${ENTRIES_DIR}/${stamp}"
+
+  if [ ! -d "$d" ]; then
+    echo "Entry directory not found: $stamp"
+    return 1
+  fi
+
+  echo "=================== ENTRY DETAILS ==================="
+  echo "Timestamp:    ${stamp}"
+  echo "Location:     ${d}"
+
+  local gpg_auth
+  gpg_auth=$(get_gpg_auth_flags)
+
+  if [ -f "${d}/video.mkv.gpg" ]; then
+    echo "Status:       🔒 AES-256 GPG Encrypted"
+    echo "Size:         $(du -h "${d}/video.mkv.gpg" | cut -f1)"
+    
+    if [ -f "${d}/meta.json.gpg" ]; then
+      echo ""
+      echo "--- Metadata ---"
+      if [ -n "${gpg_auth}" ]; then
+        # shellcheck disable=SC2086
+        gpg --batch --decrypt ${gpg_auth} "${d}/meta.json.gpg" 2>/dev/null || echo "(Encrypted metadata)"
+      else
+        echo "(Metadata is GPG encrypted)"
+      fi
+    fi
+
+    if [ -f "${d}/note.md.gpg" ]; then
+      echo ""
+      echo "--- Note Preview ---"
+      if [ -n "${gpg_auth}" ]; then
+        # shellcheck disable=SC2086
+        gpg --batch --decrypt ${gpg_auth} "${d}/note.md.gpg" 2>/dev/null | head -n 25 || echo "(Encrypted note)"
+      else
+        echo "(Note is GPG encrypted)"
+      fi
+    fi
+  elif [ -f "${d}/video.mkv" ]; then
+    echo "Status:       Plaintext"
+    echo "Size:         $(du -h "${d}/video.mkv" | cut -f1)"
+    if [ -f "${d}/meta.json" ]; then
+      echo ""
+      echo "--- Metadata ---"
+      cat "${d}/meta.json"
+    fi
+    if [ -f "${d}/note.md" ]; then
+      echo ""
+      echo "--- Note Preview ---"
+      head -n 25 "${d}/note.md"
+    fi
+  elif [ -f "${TEMP_DIR}/raw_${stamp}.mkv" ]; then
+    echo "Status:       Compressing in background..."
+  fi
+}
+
+# --- Command: Play Entry ---
+cmd_play() {
+  migrate_legacy_files
+  local target="${1:-}"
+  local verbose=false
+  if [ "${2:-}" = "-v" ] || [ "${2:-}" = "--verbose" ]; then
+    verbose=true
+  fi
+
+  # If no target, open interactive fzf with metadata preview
+  if [ -z "${target}" ]; then
+    if [ -t 0 ] && command -v fzf &>/dev/null; then
+      local raw_line
+      raw_line=$(cmd_list | sed '1,2d' | fzf \
+        --prompt="vj play > " \
+        --header="[j/k: Navigate | C-u/C-d: Scroll Preview | Enter: Play | Esc: Quit]" \
+        --preview="${SCRIPT_DIR}/vj preview {1}" \
+        --preview-window="right:55%:wrap" \
+        --bind="ctrl-j:down,ctrl-k:up,ctrl-d:page-down,ctrl-u:page-up,ctrl-y:preview-up,ctrl-e:preview-down" || true)
+      target=$(echo "${raw_line}" | awk '{print $1}')
+    else
+      target=$(cmd_list -q | head -n 1)
+    fi
+  fi
+
+  if [ -z "${target}" ]; then
+    return 0
+  fi
+
+  local entry_dir="${ENTRIES_DIR}/${target}"
+  if [ ! -d "${entry_dir}" ]; then
+    # Try finding by partial match
+    local found
+    found=$(find "${ENTRIES_DIR}" -maxdepth 1 -type d -name "*${target}*" | head -n 1)
+    if [ -n "${found}" ]; then
+      entry_dir="${found}"
+      target=$(basename "${found}")
+    else
+      echo "Entry not found: ${target}"
+      return 1
+    fi
+  fi
+
+  local mpv_opts=("--title=vj - ${target}")
+  if [ "${verbose}" = "false" ]; then
+    mpv_opts+=("--msg-level=all=no" "--really-quiet")
+  fi
+
+  local gpg_auth
+  gpg_auth=$(get_gpg_auth_flags)
+
+  if [ -f "${entry_dir}/video.mkv.gpg" ]; then
+    # shellcheck disable=SC2086
+    gpg --batch --decrypt ${gpg_auth} "${entry_dir}/video.mkv.gpg" 2>/dev/null | mpv "${mpv_opts[@]}" - || {
+      # Fallback to interactive pinentry if batch fails
+      gpg --decrypt "${entry_dir}/video.mkv.gpg" 2>/dev/null | mpv "${mpv_opts[@]}" - || {
+        echo "Failed to decrypt or play entry ${target}."
+        return 1
+      }
+    }
+  elif [ -f "${entry_dir}/video.mkv" ]; then
+    mpv "${mpv_opts[@]}" "${entry_dir}/video.mkv"
+  else
+    echo "Video file missing or still compressing."
+    return 1
+  fi
+}
+
+# --- Command: Random Play ---
+cmd_random() {
+  migrate_legacy_files
+  local verbose=false
+  if [ "${1:-}" = "-v" ] || [ "${1:-}" = "--verbose" ]; then
+    verbose=true
+  fi
+
+  shopt -s nullglob
+  local dirs=("${ENTRIES_DIR}"/*)
+  shopt -u nullglob
+
+  if [ ${#dirs[@]} -eq 0 ]; then
+    echo "No entries found."
+    return 1
+  fi
+
+  local random_dir="${dirs[RANDOM % ${#dirs[@]}]}"
+  local stamp
+  stamp=$(basename "${random_dir}")
+  echo "Playing random entry: ${stamp}"
+  cmd_play "${stamp}" "$@"
+}
+
+# --- Command: Encrypt / Decrypt ---
+cmd_encrypt() {
+  local target="${1:-}"
+  local gpg_auth
+  gpg_auth=$(get_gpg_auth_flags)
+
+  if [ -z "${target}" ]; then
+    echo "Usage: vj encrypt <entry_id|all>"
+    return 1
+  fi
+
+  local targets=()
+  if [ "${target}" = "all" ]; then
+    shopt -s nullglob
+    targets=("${ENTRIES_DIR}"/*)
+    shopt -u nullglob
+  else
+    targets=("${ENTRIES_DIR}/${target}")
+  fi
+
+  for d in "${targets[@]}"; do
+    if [ -d "$d" ]; then
+      local stamp
+      stamp=$(basename "$d")
+      if [ -f "${d}/video.mkv" ]; then
+        echo "Encrypting ${stamp}..."
+        # shellcheck disable=SC2086
+        gpg --batch --yes ${gpg_auth} --symmetric --cipher-algo AES256 "${d}/video.mkv" >/dev/null 2>&1 && rm -f "${d}/video.mkv"
+        if [ -f "${d}/note.md" ]; then
+          # shellcheck disable=SC2086
+          gpg --batch --yes ${gpg_auth} --symmetric --cipher-algo AES256 "${d}/note.md" >/dev/null 2>&1 && rm -f "${d}/note.md"
+        fi
+        if [ -f "${d}/meta.json" ]; then
+          sed -i 's/"encrypted": false/"encrypted": true/' "${d}/meta.json"
+          # shellcheck disable=SC2086
+          gpg --batch --yes ${gpg_auth} --symmetric --cipher-algo AES256 "${d}/meta.json" >/dev/null 2>&1 && rm -f "${d}/meta.json"
+        fi
+      fi
+    fi
+  done
+  echo "Encryption complete."
+}
+
+cmd_decrypt() {
+  local target="${1:-}"
+  local gpg_auth
+  gpg_auth=$(get_gpg_auth_flags)
+
+  if [ -z "${target}" ]; then
+    echo "Usage: vj decrypt <entry_id|all>"
+    return 1
+  fi
+
+  local targets=()
+  if [ "${target}" = "all" ]; then
+    shopt -s nullglob
+    targets=("${ENTRIES_DIR}"/*)
+    shopt -u nullglob
+  else
+    targets=("${ENTRIES_DIR}/${target}")
+  fi
+
+  for d in "${targets[@]}"; do
+    if [ -d "$d" ]; then
+      local stamp
+      stamp=$(basename "$d")
+      if [ -f "${d}/video.mkv.gpg" ]; then
+        echo "Decrypting ${stamp}..."
+        # shellcheck disable=SC2086
+        gpg --batch --yes ${gpg_auth} --decrypt "${d}/video.mkv.gpg" > "${d}/video.mkv" 2>/dev/null && rm -f "${d}/video.mkv.gpg"
+        if [ -f "${d}/note.md.gpg" ]; then
+          # shellcheck disable=SC2086
+          gpg --batch --yes ${gpg_auth} --decrypt "${d}/note.md.gpg" > "${d}/note.md" 2>/dev/null && rm -f "${d}/note.md.gpg"
+        fi
+        if [ -f "${d}/meta.json.gpg" ]; then
+          # shellcheck disable=SC2086
+          gpg --batch --yes ${gpg_auth} --decrypt "${d}/meta.json.gpg" > "${d}/meta.json" 2>/dev/null && rm -f "${d}/meta.json.gpg"
+          sed -i 's/"encrypted": true/"encrypted": false/' "${d}/meta.json"
+        fi
+      fi
+    fi
+  done
+  echo "Decryption complete."
+}
+
+# --- Command: Stats ---
+cmd_stats() {
+  migrate_legacy_files
+  shopt -s nullglob
+  local dirs=("${ENTRIES_DIR}"/*)
+  shopt -u nullglob
+
+  local total_entries=${#dirs[@]}
+  local encrypted_count=0
+  local raw_count=0
+
+  for d in "${dirs[@]}"; do
+    if [ -f "${d}/video.mkv.gpg" ]; then
+      ((encrypted_count++)) || true
+    elif [ -f "${d}/video.mkv" ]; then
+      ((raw_count++)) || true
+    fi
+  done
+
+  local disk_usage
+  disk_usage=$(du -sh "${ENTRIES_DIR}" 2>/dev/null | cut -f1 || echo "0B")
+
+  local days_recorded=()
+  for d in "${dirs[@]}"; do
+    local day
+    day=$(basename "$d" | cut -d'_' -f1)
+    days_recorded+=("${day}")
+  done
+
+  local unique_days=0
+  if [ ${#days_recorded[@]} -gt 0 ]; then
+    unique_days=$(printf "%s\n" "${days_recorded[@]}" | sort -u | wc -l)
+  fi
+
+  echo "Location:       ${ENTRIES_DIR}"
+  echo "Calendar:       ${DATE_CALENDAR}"
+  echo "Total Entries:  ${total_entries}"
+  echo "Plaintext:      ${raw_count}"
+  echo "Encrypted:      ${encrypted_count}"
+  echo "Storage:        ${disk_usage}"
+  echo "Recorded Days:  ${unique_days}"
+}
+
+# --- Command: Completions ---
+cmd_completions() {
+  local target="${1:-install}"
+  case "${target}" in
+    fish)
+      cat "${BASE_DIR}/completions/vj.fish"
+      ;;
+    bash)
+      cat "${BASE_DIR}/completions/vj.bash"
+      ;;
+    zsh)
+      cat "${BASE_DIR}/completions/_vj"
+      ;;
+    install)
+      echo "Installing shell completions..."
+      # Fish
+      if [ -d "$HOME/.config/fish/completions" ] || [ -d "$HOME/.config/fish" ]; then
+        mkdir -p "$HOME/.config/fish/completions"
+        cp "${BASE_DIR}/completions/vj.fish" "$HOME/.config/fish/completions/vj.fish"
+        echo "[✓] Installed Fish completion to ~/.config/fish/completions/vj.fish"
+      fi
+      # Bash
+      if [ -d "$HOME/.local/share/bash-completion/completions" ] || [ -d "$HOME/.local/share" ]; then
+        mkdir -p "$HOME/.local/share/bash-completion/completions"
+        cp "${BASE_DIR}/completions/vj.bash" "$HOME/.local/share/bash-completion/completions/vj"
+        echo "[✓] Installed Bash completion to ~/.local/share/bash-completion/completions/vj"
+      fi
+      # Zsh
+      mkdir -p "$HOME/.zfunc"
+      cp "${BASE_DIR}/completions/_vj" "$HOME/.zfunc/_vj"
+      echo "[✓] Installed Zsh completion to ~/.zfunc/_vj (ensure ~/.zfunc is in fpath in ~/.zshrc)"
+      ;;
+    *)
+      echo "Usage: vj completions [fish|bash|zsh|install]"
+      ;;
+  esac
+}
+
+# --- Command: Help ---
+cmd_help() {
+  cat <<EOF
+Usage: vj [command] [options]
+
+Commands:
+  record [profile] [-e|--encrypt] [-t|--title "Title"] [--tags "a,b"] [-n|--note] [-i|--interactive] [-v]
+      Record a new entry (defaults to terry profile, default title, zero prompts)
+  
+  play [entry_id] [-v]
+      Play entry in mpv with zero-leak RAM streaming
+      (Opens fzf with rich metadata/notes preview if no ID given)
+  
+  preview <entry_id>
+      Display metadata, size, status, and note for an entry
+  
+  list / ls [-q]
+      List all journal entries in chronological table format (-q for IDs only)
+  
+  random [-v]
+      Play a random past entry
+  
+  encrypt <entry_id|all>
+      Encrypt specified entry or all entries with GPG AES-256
+  
+  decrypt <entry_id|all>
+      Decrypt specified entry or all entries to plaintext
+  
+  stats
+      Display storage and recording summary
+  
+  config
+      Open configuration file in \$EDITOR (${EDITOR})
+
+  completions [fish|bash|zsh|install]
+      Output or install shell completions
+
+Options:
+  -v, --verbose    Show verbose ffmpeg / mpv logs
+  -h, --help       Show this help message
+
+Configuration:
+  Edit ${CONFIG_FILE} to customize storage directory, Jalali calendar, key file, camera, etc.
+EOF
+}
+
+# --- Main Entrypoint ---
+case "${1:-}" in
+  record|rec|r)
+    shift
+    cmd_record "$@"
+    ;;
+  play|watch|p|w)
+    shift
+    cmd_play "$@"
+    ;;
+  preview)
+    shift
+    cmd_preview "$@"
+    ;;
+  list|ls|l)
+    shift
+    cmd_list "$@"
+    ;;
+  random|rand)
+    shift
+    cmd_random "$@"
+    ;;
+  encrypt|enc)
+    shift
+    cmd_encrypt "$@"
+    ;;
+  decrypt|dec)
+    shift
+    cmd_decrypt "$@"
+    ;;
+  stats|stat|s)
+    cmd_stats
+    ;;
+  completions|completion)
+    shift
+    cmd_completions "$@"
+    ;;
+  config|cfg)
+    "${EDITOR}" "${CONFIG_FILE}"
+    ;;
+  help|-h|--help)
+    cmd_help
+    ;;
+  "")
+    cmd_help
+    ;;
+  *)
+    # If given a date/timestamp or option directly
+    if [ -d "${ENTRIES_DIR}/$1" ]; then
+      cmd_play "$1"
+    else
+      echo "Unknown command: $1"
+      cmd_help
+      exit 1
+    fi
+    ;;
+esac

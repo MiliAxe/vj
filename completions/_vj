@@ -1,0 +1,63 @@
+#compdef vj
+
+_vj_entries() {
+    local -a entries
+    entries=(${(f)"$(vj list -q 2>/dev/null)"})
+    _describe -t entries 'vj entries' entries
+}
+
+_vj() {
+    local -a commands
+    commands=(
+        'record:Record a new video entry'
+        'play:Play entry in mpv'
+        'preview:Display metadata and note for an entry'
+        'list:List all journal entries'
+        'random:Play a random past entry'
+        'encrypt:Encrypt entries with GPG AES-256'
+        'decrypt:Decrypt entries to plaintext'
+        'stats:Display storage and recording summary'
+        'config:Open configuration file in editor'
+        'completions:Generate or install shell completion scripts'
+    )
+
+    _arguments -C \
+        '1: :->command' \
+        '*:: :->args' && return 0
+
+    case $state in
+        command)
+            _describe -t commands 'vj command' commands
+            ;;
+        args)
+            case $words[1] in
+                record)
+                    _arguments \
+                        '(-p --profile)'{-p,--profile}'[Compression profile]:profile:(terry balanced hq)' \
+                        '(-e --encrypt)'{-e,--encrypt}'[Encrypt with GPG AES-256]' \
+                        '--no-encrypt[Save unencrypted]' \
+                        '(-t --title)'{-t,--title}'[Title of entry]:title:' \
+                        '--tags[Comma-separated tags]:tags:' \
+                        '(-n --note)'{-n,--note}'[Open editor for note]' \
+                        '(-i --interactive)'{-i,--interactive}'[Prompt for title and note]' \
+                        '(-v --verbose)'{-v,--verbose}'[Verbose output]'
+                    ;;
+                play|preview)
+                    _arguments \
+                        '1:entry:_vj_entries' \
+                        '(-v --verbose)'{-v,--verbose}'[Verbose output]'
+                    ;;
+                encrypt|decrypt)
+                    _arguments \
+                        '1:entry:("all" $(vj list -q 2>/dev/null))'
+                    ;;
+                completions)
+                    _arguments \
+                        '1:shell:(bash zsh fish install)'
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+_vj "$@"
