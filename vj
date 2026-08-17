@@ -37,10 +37,12 @@ if [ -f "${CONFIG_FILE}" ]; then
   source "${CONFIG_FILE}"
 fi
 
-# Expand paths (Default to $HOME/Videos/Journal/entries)
+# Expand paths (Default to $HOME/Videos/Journal/entries and inbox)
 eval "ENTRIES_DIR=\"${JOURNAL_DIR:-${ENTRIES_DIR:-${HOME}/Videos/Journal/entries}}\""
+eval "INBOX_DIR=\"${INBOX_DIR:-$(dirname "${ENTRIES_DIR}")/inbox}\""
 eval "KEY_FILE=\"${KEY_FILE:-}\""
 TEMP_DIR="${TEMP_DIR:-/tmp/vj_temp}"
+INBOX_PORT="${INBOX_PORT:-8080}"
 
 # Configuration Defaults
 CAMERA_DEV="${CAMERA_DEV:-/dev/video0}"
@@ -53,7 +55,7 @@ if ! command -v "${EDITOR}" &>/dev/null; then
   EDITOR="vim"
 fi
 
-mkdir -p "${ENTRIES_DIR}" "${TEMP_DIR}"
+mkdir -p "${ENTRIES_DIR}" "${INBOX_DIR}" "${TEMP_DIR}"
 
 # Helper: Timestamp generator using native jdate or standard date
 get_timestamp() {
@@ -89,6 +91,60 @@ print(f'{jy:04d}-{jm:02d}-{jd:02d}_{now.strftime(\"%H-%M-%S\")}')
     fi
   else
     date +"%Y-%m-%d_%H-%M-%S"
+  fi
+}
+
+# Helper: Extract creation timestamp from a video file (EXIF/QuickTime or mtime)
+get_video_creation_timestamp() {
+  local vfile="$1"
+  local iso_date=""
+  if command -v ffprobe &>/dev/null; then
+    iso_date=$(ffprobe -v error -show_entries format_tags=creation_time:stream_tags=creation_time -of default=noprint_wrappers=1:nokey=1 "$vfile" 2>/dev/null | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}' | head -n 1 || true)
+  fi
+
+  if [ -n "${iso_date}" ]; then
+    local epoch
+    epoch=$(date -d "${iso_date}" +%s 2>/dev/null || stat -c %Y "$vfile" 2>/dev/null || date +%s)
+    if [ "${DATE_CALENDAR}" = "jalali" ] || [ "${USE_JALALI:-false}" = "true" ]; then
+      python3 -c "
+import datetime
+epoch = int('${epoch}')
+dt = datetime.datetime.fromtimestamp(epoch)
+def g2j(gy, gm, gd):
+    g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
+    gy2 = gy if gm > 2 else gy - 1
+    days = 355666 + (365 * gy) + ((gy2 + 3) // 4) - ((gy2 + 99) // 100) + ((gy2 + 399) // 400) + gd + g_d_m[gm - 1]
+    jy = -1595 + (33 * (days // 12053))
+    days %= 12053
+    jy += 4 * (days // 1461)
+    days %= 1461
+    if days > 365:
+        jy += (days - 1) // 365
+        days = (days - 1) % 365
+    if days < 186:
+        jm = 1 + (days // 31)
+        jd = 1 + (days % 31)
+    else:
+        jm = 7 + ((days - 186) // 30)
+        jd = 1 + ((days - 186) % 30)
+    return jy, jm, jd
+jy, jm, jd = g2j(dt.year, dt.month, dt.day)
+print(f'{jy:04d}-{jm:02d}-{jd:02d}_{dt.strftime(\"%H-%M-%S\")}')
+" 2>/dev/null || date -d "@${epoch}" +"%Y-%m-%d_%H-%M-%S"
+    else
+      date -d "@${epoch}" +"%Y-%m-%d_%H-%M-%S"
+    fi
+  else
+    # Fallback to file modification time
+    if [ "${DATE_CALENDAR}" = "jalali" ] || [ "${USE_JALALI:-false}" = "true" ]; then
+      if command -v jdate &>/dev/null; then
+        jdate -r "$vfile" +"%Y-%m-%d_%H-%M-%S" 2>/dev/null || date -r "$vfile" +"%Y-%m-%d_%H-%M-%S"
+      else
+        date -r "$vfile" +"%Y-%m-%d_%H-%M-%S" 2>/dev/null || get_timestamp
+      fi
+    else
+      date -r "$vfile" +"%Y-%m-%d_%H-%M-%S" 2>/dev/null || get_timestamp
+    fi
   fi
 }
 
@@ -364,6 +420,543 @@ EOF
 
   disown
   echo "Encoding in background (PID: $!). Entry saved to ${entry_folder}"
+}
+
+# --- Command: Preview Inbox Item (used by fzf) ---
+cmd_preview_inbox() {
+  local f="$1"
+  if [ ! -f "$f" ]; then
+    echo "File not found: $f"
+    return 1
+  fi
+
+  echo "================ INBOX VIDEO PREVIEW ================"
+  echo "File:         $(basename "$f")"
+  echo "Size:         $(du -h "$f" | cut -f1)"
+  echo "Path:         $f"
+  echo ""
+
+  if command -v ffprobe &>/dev/null; then
+    local info
+    info=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate,codec_name:format=duration -of default=noprint_wrappers=1 "$f" 2>/dev/null || true)
+    local width height fps codec duration
+    width=$(echo "$info" | grep '^width=' | cut -d= -f2)
+    height=$(echo "$info" | grep '^height=' | cut -d= -f2)
+    codec=$(echo "$info" | grep '^codec_name=' | cut -d= -f2)
+    fps=$(echo "$info" | grep '^r_frame_rate=' | cut -d= -f2 | awk -F/ '{if($2>0) printf "%.0f", $1/$2; else print $1}')
+    duration=$(echo "$info" | grep '^duration=' | cut -d= -f2 | awk '{printf "%02d:%02d:%02d", $1/3600, ($1%3600)/60, $1%60}')
+    
+    if [ -n "${width}" ] && [ -n "${height}" ]; then
+      echo "Resolution:   ${width}x${height} @ ${fps}fps"
+      echo "Codec:        ${codec}"
+      echo "Duration:     ${duration}"
+    fi
+  fi
+
+  local detected_stamp
+  detected_stamp=$(get_video_creation_timestamp "$f")
+  echo "Detected Date: ${detected_stamp}"
+  echo "Target Folder: ${ENTRIES_DIR}/${detected_stamp}"
+}
+
+# --- Command: Import from Inbox or Specified Files ---
+cmd_import() {
+  local profile="${DEFAULT_PROFILE}"
+  local do_encrypt="${AUTO_ENCRYPT}"
+  local custom_title=""
+  local custom_tags=""
+  local open_note=false
+  local interactive=false
+  local keep_raw=false
+  local verbose=false
+  local specified_files=()
+
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -p|--profile)
+        profile="$2"
+        shift 2
+        ;;
+      -e|--encrypt)
+        do_encrypt="true"
+        shift
+        ;;
+      --no-encrypt)
+        do_encrypt="false"
+        shift
+        ;;
+      -t|--title)
+        custom_title="$2"
+        shift 2
+        ;;
+      --tags)
+        custom_tags="$2"
+        shift 2
+        ;;
+      -n|--note)
+        open_note=true
+        shift
+        ;;
+      -i|--interactive)
+        interactive=true
+        shift
+        ;;
+      --keep)
+        keep_raw=true
+        shift
+        ;;
+      -v|--verbose)
+        verbose=true
+        shift
+        ;;
+      terry|balanced|hq)
+        profile="$1"
+        shift
+        ;;
+      -*)
+        echo "Unknown option: $1"
+        return 1
+        ;;
+      *)
+        specified_files+=("$1")
+        shift
+        ;;
+    esac
+  done
+
+  local files_to_import=()
+
+  if [ ${#specified_files[@]} -gt 0 ]; then
+    files_to_import=("${specified_files[@]}")
+  else
+    # Scan inbox directory for videos
+    shopt -s nullglob nocaseglob
+    local inbox_candidates=("${INBOX_DIR}"/*.mp4 "${INBOX_DIR}"/*.mkv "${INBOX_DIR}"/*.mov "${INBOX_DIR}"/*.webm "${INBOX_DIR}"/*.3gp "${INBOX_DIR}"/*.avi "${INBOX_DIR}"/*.m4v "${INBOX_DIR}"/*.ts)
+    shopt -u nullglob nocaseglob
+
+    if [ ${#inbox_candidates[@]} -eq 0 ]; then
+      echo "No video files found in inbox: ${INBOX_DIR}"
+      echo "You can drop video files into ${INBOX_DIR} or run 'vj inbox-server' to upload from your phone."
+      return 0
+    fi
+
+    if [ -t 0 ] && command -v fzf &>/dev/null; then
+      local preview_cmd
+      if command -v vj &>/dev/null; then
+        preview_cmd="vj preview-inbox {}"
+      else
+        preview_cmd="\"${SCRIPT_PATH}\" preview-inbox {}"
+      fi
+
+      local selected_raw
+      selected_raw=$(printf "%s\n" "${inbox_candidates[@]}" | fzf -m \
+        --prompt="Select Videos to Import (Tab to multi-select) > " \
+        --header="[Tab: Multi-select | Ctrl-A: Select All | Enter: Import | Esc: Cancel]" \
+        --preview="${preview_cmd}" \
+        --preview-window="right:55%:wrap" \
+        --bind="ctrl-a:select-all,ctrl-j:down,ctrl-k:up,ctrl-d:page-down,ctrl-u:page-up" || true)
+
+      if [ -z "${selected_raw}" ]; then
+        echo "Import cancelled."
+        return 0
+      fi
+
+      IFS=$'\n' read -r -d '' -a files_to_import <<< "${selected_raw}" || true
+    else
+      files_to_import=("${inbox_candidates[@]}")
+    fi
+  fi
+
+  if [ ${#files_to_import[@]} -eq 0 ]; then
+    echo "No files selected for import."
+    return 0
+  fi
+
+  local params
+  params=$(get_profile_params "${profile}")
+  local res fps vcodec vpreset vcrf acodec achannels abitrate vfilter
+  read -r res fps vcodec vpreset vcrf acodec achannels abitrate vfilter <<< "${params}"
+
+  local gpg_auth
+  gpg_auth=$(get_gpg_auth_flags)
+
+  echo "Importing ${#files_to_import[@]} video file(s) [Profile: ${profile}]..."
+
+  for raw_file in "${files_to_import[@]}"; do
+    if [ ! -f "${raw_file}" ]; then
+      echo "Skipping missing file: ${raw_file}"
+      continue
+    fi
+
+    local bname
+    bname=$(basename "${raw_file}")
+    local timestamp
+    timestamp=$(get_video_creation_timestamp "${raw_file}")
+    
+    local entry_folder="${ENTRIES_DIR}/${timestamp}"
+    local count=1
+    while [ -d "${entry_folder}" ]; do
+      timestamp="${timestamp}_${count}"
+      entry_folder="${ENTRIES_DIR}/${timestamp}"
+      ((count++)) || true
+    done
+
+    mkdir -p "${entry_folder}"
+    local final_out="${entry_folder}/video.mkv"
+    local meta_file="${entry_folder}/meta.json"
+    local note_file="${entry_folder}/note.md"
+
+    local this_title="${custom_title}"
+    local this_tags="${custom_tags}"
+    local this_open_note="${open_note}"
+
+    if [ "${interactive}" = "true" ] && [ -t 0 ]; then
+      echo ""
+      echo "--- Configuring: ${bname} (Date: ${timestamp}) ---"
+      read -r -p "Title [press enter for 'Imported: ${bname}']: " input_title
+      if [ -n "${input_title}" ]; then this_title="${input_title}"; fi
+      read -r -p "Tags (comma-separated, optional): " input_tags
+      if [ -n "${input_tags}" ]; then this_tags="${input_tags}"; fi
+      read -r -p "Write note in ${EDITOR}? [y/N]: " note_resp
+      if [[ "${note_resp}" =~ ^[Yy]$ ]]; then
+        this_open_note=true
+      fi
+    fi
+
+    if [ -z "${this_title}" ]; then
+      this_title="Imported: ${bname}"
+    fi
+
+    local tags_json="[]"
+    if [ -n "${this_tags}" ]; then
+      IFS=',' read -ra ADDR <<< "${this_tags}"
+      local formatted_tags=()
+      for t in "${ADDR[@]}"; do
+        trimmed=$(echo "$t" | xargs)
+        formatted_tags+=("\"${trimmed}\"")
+      done
+      tags_json="[$(IFS=,; echo "${formatted_tags[*]}")]"
+    fi
+
+    if [ "${this_open_note}" = "true" ]; then
+      cat <<EOF > "${note_file}"
+# ${this_title}
+*Imported: ${bname}*
+*Date: ${timestamp}*
+*Tags: ${this_tags}*
+
+EOF
+      "${EDITOR}" "${note_file}"
+    fi
+
+    cat <<EOF > "${meta_file}"
+{
+  "timestamp": "${timestamp}",
+  "calendar": "${DATE_CALENDAR}",
+  "title": "${this_title}",
+  "original_filename": "${bname}",
+  "imported": true,
+  "profile": "${profile}",
+  "tags": ${tags_json},
+  "encrypted": false
+}
+EOF
+
+    echo "Compressing [${profile}] ${bname} -> ${timestamp}..."
+
+    local vf_arg=""
+    if [ "${vfilter}" != "null" ]; then
+      vf_arg="-vf ${vfilter}"
+    fi
+
+    local log_arg="-loglevel quiet"
+    if [ "${verbose}" = "true" ]; then
+      log_arg="-loglevel info"
+    fi
+
+    nice -n 19 ionice -c 3 ffmpeg -hide_banner ${log_arg} \
+      -i "${raw_file}" \
+      ${vf_arg} \
+      -c:v "${vcodec}" -preset "${vpreset}" -crf "${vcrf}" -g 240 -pix_fmt yuv420p \
+      -c:a "${acodec}" -ac "${achannels}" -b:a "${abitrate}" -application voip \
+      "${final_out}" >/dev/null 2>&1
+
+    if [ "${do_encrypt}" = "true" ]; then
+      # shellcheck disable=SC2086
+      gpg --batch --yes ${gpg_auth} --symmetric --cipher-algo AES256 "${final_out}" >/dev/null 2>&1 && rm -f "${final_out}"
+      if [ -f "${note_file}" ]; then
+        # shellcheck disable=SC2086
+        gpg --batch --yes ${gpg_auth} --symmetric --cipher-algo AES256 "${note_file}" >/dev/null 2>&1 && rm -f "${note_file}"
+      fi
+      sed -i 's/"encrypted": false/"encrypted": true/' "${meta_file}"
+      # shellcheck disable=SC2086
+      gpg --batch --yes ${gpg_auth} --symmetric --cipher-algo AES256 "${meta_file}" >/dev/null 2>&1 && rm -f "${meta_file}"
+    fi
+
+    if [ "${keep_raw}" = "false" ]; then
+      rm -f "${raw_file}"
+    fi
+
+    echo "[✓] Imported ${bname} -> ${entry_folder}"
+  done
+
+  notify-send "vj" "Finished importing ${#files_to_import[@]} video(s)" 2>/dev/null || true
+  echo "All imports completed."
+}
+
+# --- Command: Inbox Upload Server (Mobile Web UI) ---
+cmd_inbox_server() {
+  local port="${1:-$INBOX_PORT}"
+
+  local local_ip
+  local_ip=$(python3 -c "
+import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+try:
+    s.connect(('8.8.8.8', 80))
+    print(s.getsockname()[0])
+except Exception:
+    print('127.0.0.1')
+finally:
+    s.close()
+" 2>/dev/null || echo "127.0.0.1")
+
+  local server_url="http://${local_ip}:${port}"
+
+  echo "========================================================"
+  echo "  vj Mobile Inbox Server"
+  echo "========================================================"
+  echo "  URL:       ${server_url}"
+  echo "  Inbox:     ${INBOX_DIR}"
+  echo ""
+  echo "  Scan QR code with your phone camera to upload videos:"
+  echo "--------------------------------------------------------"
+  
+  if command -v qrencode &>/dev/null; then
+    qrencode -t ANSIUTF8 "${server_url}" 2>/dev/null || qrencode -t UTF8 "${server_url}" || true
+  fi
+  echo "--------------------------------------------------------"
+  echo "Press Ctrl-C to stop the server."
+  echo ""
+
+  PORT="${port}" INBOX="${INBOX_DIR}" python3 - <<'PYEOF'
+import http.server, socketserver, os, sys, email.parser, email.policy
+
+PORT = int(os.environ.get('PORT', 8080))
+INBOX = os.environ.get('INBOX', '/tmp')
+os.makedirs(INBOX, exist_ok=True)
+
+HTML_PAGE = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>vj mobile inbox</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --card: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --accent: #58a6ff;
+      --accent-hover: #1f6feb;
+      --success: #238636;
+      --muted: #8b949e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--text); padding: 20px; display: flex; justify-content: center; min-height: 100vh; }
+    .container { width: 100%; max-width: 500px; }
+    header { text-align: center; margin-bottom: 24px; padding-top: 10px; }
+    h1 { font-size: 1.8rem; font-weight: 700; color: var(--accent); margin-bottom: 6px; letter-spacing: -0.5px; }
+    p.sub { color: var(--muted); font-size: 0.95rem; }
+    .dropzone {
+      background: var(--card);
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 40px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-bottom: 20px;
+    }
+    .dropzone.dragover { border-color: var(--accent); background: #1c2128; }
+    .dropzone svg { width: 48px; height: 48px; fill: var(--accent); margin-bottom: 12px; }
+    .btn {
+      display: inline-block;
+      background: var(--accent);
+      color: #ffffff;
+      font-weight: 600;
+      padding: 12px 24px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: background 0.2s;
+      width: 100%;
+      margin-top: 8px;
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .btn-camera { background: #21262d; border: 1px solid var(--border); margin-top: 12px; }
+    .btn-camera:hover { background: #30363d; }
+    #file-input, #camera-input { display: none; }
+    .progress-wrap { display: none; margin: 20px 0; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+    .progress-bar-bg { background: #21262d; height: 10px; border-radius: 5px; overflow: hidden; margin-top: 8px; }
+    .progress-bar { background: var(--accent); height: 100%; width: 0%; transition: width 0.1s linear; }
+    .file-list { margin-top: 20px; list-style: none; }
+    .file-item { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; }
+    .file-item.done { border-color: var(--success); }
+    .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; background: #238636; color: white; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>vj inbox</h1>
+      <p class="sub">Upload video recordings directly to your PC</p>
+    </header>
+
+    <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
+      <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+      <p style="font-weight: 600; margin-bottom: 4px;">Tap to select or drop video files</p>
+      <p style="color: var(--muted); font-size: 0.85rem;">Supports MP4, MOV, MKV, WebM, 3GP</p>
+    </div>
+
+    <input type="file" id="file-input" multiple accept="video/*" onchange="handleFiles(this.files)">
+    <input type="file" id="camera-input" accept="video/*" capture="environment" onchange="handleFiles(this.files)">
+
+    <button class="btn btn-camera" onclick="document.getElementById('camera-input').click()">📹 Record with Camera</button>
+
+    <div class="progress-wrap" id="progress-wrap">
+      <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
+        <span id="progress-status">Uploading...</span>
+        <span id="progress-percent">0%</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar" id="progress-bar"></div>
+      </div>
+    </div>
+
+    <ul class="file-list" id="file-list"></ul>
+  </div>
+
+  <script>
+    const dropzone = document.getElementById('dropzone');
+    ['dragenter', 'dragover'].forEach(e => dropzone.addEventListener(e, (evt) => { evt.preventDefault(); dropzone.classList.add('dragover'); }));
+    ['dragleave', 'drop'].forEach(e => dropzone.addEventListener(e, (evt) => { evt.preventDefault(); dropzone.classList.remove('dragover'); }));
+    dropzone.addEventListener('drop', (evt) => { handleFiles(evt.dataTransfer.files); });
+
+    function handleFiles(files) {
+      if (!files.length) return;
+      const progressWrap = document.getElementById('progress-wrap');
+      const progressBar = document.getElementById('progress-bar');
+      const progressPercent = document.getElementById('progress-percent');
+      const progressStatus = document.getElementById('progress-status');
+      const fileList = document.getElementById('file-list');
+
+      progressWrap.style.display = 'block';
+
+      let uploaded = 0;
+      const total = files.length;
+
+      Array.from(files).forEach((file, index) => {
+        const item = document.createElement('li');
+        item.className = 'file-item';
+        item.innerHTML = `<span>${file.name} (${(file.size / (1024*1024)).toFixed(1)} MB)</span><span class="badge" style="background: #58a6ff;">Uploading</span>`;
+        fileList.prepend(item);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/upload', true);
+
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const pct = Math.round((e.loaded / e.total) * 100);
+            progressBar.style.width = pct + '%';
+            progressPercent.innerText = pct + '%';
+            progressStatus.innerText = `Uploading: ${file.name}`;
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status === 200) {
+            item.className = 'file-item done';
+            item.querySelector('.badge').style.background = '#238636';
+            item.querySelector('.badge').innerText = '✓ In Inbox';
+            uploaded++;
+            if (uploaded === total) {
+              progressStatus.innerText = 'All uploads complete!';
+              setTimeout(() => { progressWrap.style.display = 'none'; }, 2000);
+            }
+          } else {
+            item.querySelector('.badge').style.background = '#da3633';
+            item.querySelector('.badge').innerText = 'Failed';
+          }
+        };
+
+        xhr.onerror = () => {
+          item.querySelector('.badge').style.background = '#da3633';
+          item.querySelector('.badge').innerText = 'Error';
+        };
+
+        const formData = new FormData();
+        formData.append('files', file);
+        xhr.send(formData);
+      });
+    }
+  </script>
+</body>
+</html>'''
+
+class InboxHandler(http.server.BaseHTTPRequestHandler):
+    def log_message(self, format, *args):
+        pass
+
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/html; charset=utf-8')
+        self.end_headers()
+        self.wfile.write(HTML_PAGE.encode('utf-8'))
+
+    def do_POST(self):
+        if self.path == '/upload':
+            ctype = self.headers.get('Content-Type', '')
+            clength = int(self.headers.get('Content-Length', 0))
+            if 'multipart/form-data' in ctype and clength > 0:
+                raw_body = self.rfile.read(clength)
+                msg_feed = f'Content-Type: {ctype}\n\n'.encode('utf-8') + raw_body
+                msg = email.parser.BytesFeedParser(policy=email.policy.default)
+                msg.feed(msg_feed)
+                parsed = msg.close()
+
+                saved_files = []
+                for part in parsed.iter_parts():
+                    filename = part.get_filename()
+                    if filename:
+                        clean_fn = os.path.basename(filename)
+                        out_path = os.path.join(INBOX, clean_fn)
+                        payload = part.get_payload(decode=True)
+                        if payload:
+                            with open(out_path, 'wb') as f:
+                                f.write(payload)
+                            size_mb = len(payload) / (1024 * 1024)
+                            print(f'  [✓ UPLOADED] {clean_fn} ({size_mb:.1f} MB) -> inbox/')
+                            saved_files.append(clean_fn)
+
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(b'OK')
+                return
+
+        self.send_response(400)
+        self.end_headers()
+
+with socketserver.TCPServer(('0.0.0.0', PORT), InboxHandler) as httpd:
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print('\nStopping inbox server.')
+PYEOF
 }
 
 # --- Command: List entries ---
@@ -709,6 +1302,7 @@ cmd_stats() {
   fi
 
   echo "Location:       ${ENTRIES_DIR}"
+  echo "Inbox:          ${INBOX_DIR}"
   echo "Calendar:       ${DATE_CALENDAR}"
   echo "Total Entries:  ${total_entries}"
   echo "Plaintext:      ${raw_count}"
@@ -722,12 +1316,14 @@ gen_fish_completion() {
   cat <<'EOF'
 # Fish completion for vj
 
-set -l commands record play preview list random encrypt decrypt stats config completions help
+set -l commands record play preview list random encrypt decrypt stats config import inbox-server preview-inbox completions help
 
 complete -c vj -f
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a record -d "Record a new video entry"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a play -d "Play entry in mpv (RAM streaming for encrypted)"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a preview -d "Preview entry metadata and notes"
+complete -c vj -n "not __fish_seen_subcommand_from $commands" -a import -d "Import videos from inbox or file paths"
+complete -c vj -n "not __fish_seen_subcommand_from $commands" -a inbox-server -d "Start local mobile upload server with QR code"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a list -d "List all entries in table format"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a random -d "Play a random past entry"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a encrypt -d "Encrypt entry with GPG AES-256"
@@ -736,15 +1332,16 @@ complete -c vj -n "not __fish_seen_subcommand_from $commands" -a stats -d "Show 
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a config -d "Edit configuration file"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a completions -d "Output or install shell completions"
 
-# Record options
-complete -c vj -n "__fish_seen_subcommand_from record" -s p -l profile -x -a "terry balanced hq" -d "Compression profile"
-complete -c vj -n "__fish_seen_subcommand_from record" -s e -l encrypt -d "Encrypt with GPG AES-256"
-complete -c vj -n "__fish_seen_subcommand_from record" -l no-encrypt -d "Save unencrypted"
-complete -c vj -n "__fish_seen_subcommand_from record" -s t -l title -r -d "Title of entry"
-complete -c vj -n "__fish_seen_subcommand_from record" -l tags -r -d "Comma-separated tags"
-complete -c vj -n "__fish_seen_subcommand_from record" -s n -l note -d "Open editor for notes"
-complete -c vj -n "__fish_seen_subcommand_from record" -s i -l interactive -d "Prompt for title and note"
-complete -c vj -n "__fish_seen_subcommand_from record" -s v -l verbose -d "Verbose ffmpeg/mpv output"
+# Record & Import options
+complete -c vj -n "__fish_seen_subcommand_from record import" -s p -l profile -x -a "terry balanced hq" -d "Compression profile"
+complete -c vj -n "__fish_seen_subcommand_from record import" -s e -l encrypt -d "Encrypt with GPG AES-256"
+complete -c vj -n "__fish_seen_subcommand_from record import" -l no-encrypt -d "Save unencrypted"
+complete -c vj -n "__fish_seen_subcommand_from record import" -s t -l title -r -d "Title of entry"
+complete -c vj -n "__fish_seen_subcommand_from record import" -l tags -r -d "Comma-separated tags"
+complete -c vj -n "__fish_seen_subcommand_from record import" -s n -l note -d "Open editor for notes"
+complete -c vj -n "__fish_seen_subcommand_from record import" -s i -l interactive -d "Prompt for title and note"
+complete -c vj -n "__fish_seen_subcommand_from record import" -s v -l verbose -d "Verbose ffmpeg/mpv output"
+complete -c vj -n "__fish_seen_subcommand_from import" -l keep -d "Keep original file in inbox"
 
 # Subcommands taking entry IDs
 function __fish_vj_entries
@@ -764,7 +1361,7 @@ _vj_completions() {
     local cur prev words cword
     _init_completion || return
 
-    local commands="record play preview list random encrypt decrypt stats config completions help"
+    local commands="record play preview list random encrypt decrypt stats config import inbox-server preview-inbox completions help"
     local profiles="terry balanced hq"
 
     if [[ $cword -eq 1 ]]; then
@@ -778,6 +1375,13 @@ _vj_completions() {
                 COMPREPLY=( $(compgen -W "${profiles}" -- "${cur}") )
             else
                 COMPREPLY=( $(compgen -W "-p --profile -e --encrypt --no-encrypt -t --title --tags -n --note -i --interactive -v --verbose terry balanced hq" -- "${cur}") )
+            fi
+            ;;
+        import)
+            if [[ "${prev}" == "-p" || "${prev}" == "--profile" ]]; then
+                COMPREPLY=( $(compgen -W "${profiles}" -- "${cur}") )
+            else
+                COMPREPLY=( $(compgen -W "-p --profile -e --encrypt --no-encrypt -t --title --tags -n --note -i --interactive --keep -v --verbose terry balanced hq" -- "${cur}") )
             fi
             ;;
         play|preview)
@@ -816,6 +1420,8 @@ _vj() {
     local -a commands
     commands=(
         'record:Record a new video entry'
+        'import:Import video files from inbox or path'
+        'inbox-server:Start local mobile upload web server'
         'play:Play entry in mpv'
         'preview:Display metadata and note for an entry'
         'list:List all journal entries'
@@ -848,9 +1454,22 @@ _vj() {
                         '(-i --interactive)'{-i,--interactive}'[Prompt for title and note]' \
                         '(-v --verbose)'{-v,--verbose}'[Verbose output]'
                     ;;
+                import)
+                    _arguments \
+                        '(-p --profile)'{-p,--profile}'[Compression profile]:profile:(terry balanced hq)' \
+                        '(-e --encrypt)'{-e,--encrypt}'[Encrypt with GPG AES-256]' \
+                        '--no-encrypt[Save unencrypted]' \
+                        '(-t --title)'{-t,--title}'[Title of entry]:title:' \
+                        '--tags[Comma-separated tags]:tags:' \
+                        '(-n --note)'{-n,--note}'[Open editor for note]' \
+                        '(-i --interactive)'{-i,--interactive}'[Prompt for title and note]' \
+                        '--keep[Keep raw file in inbox]' \
+                        '(-v --verbose)'{-v,--verbose}'[Verbose output]' \
+                        '*:file:_files'
+                    ;;
                 play|preview)
                     _arguments \
-                        '1:entry:_vj_entries' \
+                        '1:entry:_diary_entries' \
                         '(-v --verbose)'{-v,--verbose}'[Verbose output]'
                     ;;
                 encrypt|decrypt)
@@ -911,23 +1530,33 @@ cmd_help() {
   cat <<EOF
 Usage: vj [command] [options]
 
-Commands:
+Recording & Ingestion:
   record [profile] [-e|--encrypt] [-t|--title "Title"] [--tags "a,b"] [-n|--note] [-i|--interactive] [-v]
-      Record a new entry (defaults to terry profile, default title, zero prompts)
+      Record a new entry from webcam (defaults to terry profile, instant save)
   
+  import [files...] [-p profile] [-e|--encrypt] [-t "Title"] [--tags "a,b"] [-n|--note] [-i|--interactive] [--keep] [-v]
+      Import video files from inbox or file paths (opens fzf multi-select with side preview pane if no files given)
+  
+  inbox-server [port]
+      Start a local mobile upload web server with a terminal QR code for uploading phone recordings
+
+Browsing & Playback:
   play [entry_id] [-v]
-      Play entry in mpv with zero-leak RAM streaming
-      (Opens fzf with rich metadata/notes preview if no ID given)
+      Play entry in mpv with zero-leak RAM streaming (opens fzf with live preview if no ID given)
   
   preview <entry_id>
       Display metadata, size, status, and note for an entry
+  
+  preview-inbox <file_path>
+      Display format, resolution, codec, duration, and detected creation date for an inbox video
   
   list / ls [-q]
       List all journal entries in chronological table format (-q for IDs only)
   
   random [-v]
       Play a random past entry
-  
+
+Vault Management:
   encrypt <entry_id|all>
       Encrypt specified entry or all entries with GPG AES-256
   
@@ -948,7 +1577,7 @@ Options:
   -h, --help       Show this help message
 
 Configuration:
-  Edit ${CONFIG_FILE} to customize storage directory, Jalali calendar, key file, camera, etc.
+  Edit ${CONFIG_FILE} to customize storage directory, inbox folder, Jalali calendar, key file, camera, etc.
 EOF
 }
 
@@ -957,6 +1586,18 @@ case "${1:-}" in
   record|rec|r)
     shift
     cmd_record "$@"
+    ;;
+  import|imp)
+    shift
+    cmd_import "$@"
+    ;;
+  inbox-server|server|srv)
+    shift
+    cmd_inbox_server "$@"
+    ;;
+  preview-inbox)
+    shift
+    cmd_preview_inbox "$@"
     ;;
   play|watch|p|w)
     shift

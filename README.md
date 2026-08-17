@@ -71,6 +71,9 @@ vj stats
 | :--- | :--- | :--- |
 | **`vj record`** | Start live webcam capture & preview | `vj record -p terry` |
 | **`vj record -t "..."`** | Record with title, tags, or notes | `vj record -t "Life Update" --tags "dev,log" -n` |
+| **`vj import`** | Multi-select import from inbox with video preview pane | `vj import` |
+| **`vj import [files...]`** | Import specific videos with metadata conversion | `vj import ~/Downloads/vid.mp4 -t "Trip"` |
+| **`vj inbox-server`** | Start local upload server with phone QR code | `vj inbox-server 8080` |
 | **`vj play`** | Interactive `fzf` browser with live metadata preview | `vj play` |
 | **`vj play <id>`** | Play specific entry directly in `mpv` | `vj play 1405-05-26_18-35-09` |
 | **`vj preview <id>`** | Print entry metadata and note preview to stdout | `vj preview 1405-05-26_18-35-09` |
