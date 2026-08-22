@@ -2,8 +2,8 @@ _vj_completions() {
     local cur prev words cword
     _init_completion || return
 
-    local commands="record play preview list random encrypt decrypt stats config completions help"
-    local profiles="terry balanced hq"
+    local commands="record play preview list random encrypt decrypt stats profiles config import inbox-server preview-inbox completions help"
+    local profiles="potato compact terry balanced hq"
 
     if [[ $cword -eq 1 ]]; then
         COMPREPLY=( $(compgen -W "${commands}" -- "${cur}") )
@@ -15,7 +15,14 @@ _vj_completions() {
             if [[ "${prev}" == "-p" || "${prev}" == "--profile" ]]; then
                 COMPREPLY=( $(compgen -W "${profiles}" -- "${cur}") )
             else
-                COMPREPLY=( $(compgen -W "-p --profile -e --encrypt --no-encrypt -t --title --tags -n --note -i --interactive -v --verbose terry balanced hq" -- "${cur}") )
+                COMPREPLY=( $(compgen -W "-p --profile -e --encrypt --no-encrypt -t --title --tags -n --note -i --interactive -v --verbose ${profiles}" -- "${cur}") )
+            fi
+            ;;
+        import)
+            if [[ "${prev}" == "-p" || "${prev}" == "--profile" ]]; then
+                COMPREPLY=( $(compgen -W "${profiles}" -- "${cur}") )
+            else
+                COMPREPLY=( $(compgen -W "-p --profile -e --encrypt --no-encrypt -t --title --tags -n --note -i --interactive --keep -v --verbose ${profiles}" -- "${cur}") )
             fi
             ;;
         play|preview)

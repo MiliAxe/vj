@@ -162,21 +162,41 @@ get_gpg_auth_flags() {
 # Profile specifications
 get_profile_params() {
   local profile="$1"
+  local upper_name
+  upper_name=$(echo "${profile}" | tr '[:lower:]-' '[:upper:]_')
+  local var_name="PROFILE_${upper_name}"
+
+  # 1. Custom user profile from config.env (e.g. PROFILE_MYPROFILE="...")
+  if [ -n "${!var_name:-}" ]; then
+    echo "${!var_name}"
+    return 0
+  fi
+
+  # 2. Built-in profiles
   case "${profile}" in
-    terry)
-      # Ultra-efficient retro mode: 640x480, 24fps, SVT-AV1 CRF 34, Opus 20k mono speech
-      echo "640x480 24 libsvtav1 4 34 libopus 1 20k hqdn3d=2:1.5:3:2.5"
+    potato|micro|ultra)
+      # Extreme low-bandwidth: ~2 MB / 10 min (~12 MB / hour)
+      echo "320x240 10 libsvtav1 4 48 libopus 1 10k scale=320:240,fps=10,hqdn3d=5:4:7:5,unsharp=3:3:0.5 highpass=f=80,loudnorm=I=-16:TP=-1.5:LRA=11 -svtav1-params tune=0:film-grain=0"
+      ;;
+    compact)
+      # Compact & clear: ~4.5 MB / 10 min (~27 MB / hour)
+      echo "480x360 12 libsvtav1 4 44 libopus 1 12k scale=480:360,fps=12,hqdn3d=4:3:6:4.5,unsharp=3:3:0.5 highpass=f=80,loudnorm=I=-16:TP=-1.5:LRA=11 -svtav1-params tune=0:film-grain=0"
+      ;;
+    terry|default)
+      # Retro talking-head sweet spot: ~8 MB / 10 min (~48 MB / hour)
+      echo "640x480 15 libsvtav1 4 38 libopus 1 14k scale=640:480,fps=15,hqdn3d=3:2.5:5:4,unsharp=3:3:0.4 highpass=f=80,loudnorm=I=-16:TP=-1.5:LRA=11 -svtav1-params tune=0:film-grain=0"
       ;;
     balanced)
-      # Crisp 720p speech & cam: 1280x720, 25fps, SVT-AV1 CRF 28, Opus 48k stereo
-      echo "1280x720 25 libsvtav1 6 28 libopus 2 48k hqdn3d=1:1:2:2"
+      # Crisp 720p speech & cam: ~22 MB / 10 min (~130 MB / hour)
+      echo "1280x720 24 libsvtav1 5 30 libopus 2 32k scale=1280:720,fps=24,hqdn3d=1.5:1.5:3:3 highpass=f=80,loudnorm=I=-16:TP=-1.5:LRA=11 -svtav1-params tune=0:film-grain=0"
       ;;
     hq)
-      # High-def archival: 1920x1080, 30fps, SVT-AV1 CRF 22, Opus 96k stereo
-      echo "1920x1080 30 libsvtav1 6 22 libopus 2 96k null"
+      # High-def archival: ~60 MB / 10 min (~360 MB / hour)
+      echo "1920x1080 30 libsvtav1 6 24 libopus 2 64k scale=1920:1080,fps=30 loudnorm=I=-16:TP=-1.5:LRA=11 -svtav1-params tune=0:film-grain=0"
       ;;
     *)
-      echo "640x480 24 libsvtav1 4 34 libopus 1 20k hqdn3d=2:1.5:3:2.5"
+      # Fallback to terry
+      echo "640x480 15 libsvtav1 4 38 libopus 1 14k scale=640:480,fps=15,hqdn3d=3:2.5:5:4,unsharp=3:3:0.4 highpass=f=80,loudnorm=I=-16:TP=-1.5:LRA=11 -svtav1-params tune=0:film-grain=0"
       ;;
   esac
 }
@@ -263,11 +283,11 @@ cmd_record() {
         verbose=true
         shift
         ;;
-      terry|balanced|hq)
-        profile="$1"
+      -*)
         shift
         ;;
       *)
+        profile="$1"
         shift
         ;;
     esac
@@ -275,8 +295,8 @@ cmd_record() {
 
   local params
   params=$(get_profile_params "${profile}")
-  local res fps vcodec vpreset vcrf acodec achannels abitrate vfilter
-  read -r res fps vcodec vpreset vcrf acodec achannels abitrate vfilter <<< "${params}"
+  local res fps vcodec vpreset vcrf acodec achannels abitrate vfilter afilter extra_flags
+  read -r res fps vcodec vpreset vcrf acodec achannels abitrate vfilter afilter extra_flags <<< "${params}"
 
   local timestamp
   timestamp=$(get_timestamp)
@@ -386,17 +406,40 @@ EOF
 
   (
     local vf_arg=""
-    if [ "${vfilter}" != "null" ]; then
+    if [ -n "${vfilter:-}" ] && [ "${vfilter}" != "null" ]; then
       vf_arg="-vf ${vfilter}"
     fi
 
-    # Suppress all SVT-AV1 / ffmpeg stdout & stderr completely in subshell
-    nice -n 19 ionice -c 3 ffmpeg -hide_banner -loglevel quiet \
+    local af_arg=""
+    if [ -n "${afilter:-}" ] && [ "${afilter}" != "null" ]; then
+      af_arg="-af ${afilter}"
+    fi
+
+    local extra_opts=()
+    if [ -n "${extra_flags:-}" ] && [ "${extra_flags}" != "null" ]; then
+      read -ra extra_opts <<< "${extra_flags}"
+    fi
+    if [ -n "${EXTRA_FFMPEG_FLAGS:-}" ]; then
+      local global_extra=()
+      read -ra global_extra <<< "${EXTRA_FFMPEG_FLAGS}"
+      extra_opts+=("${global_extra[@]}")
+    fi
+
+    # Suppress all SVT-AV1 / ffmpeg stdout & stderr in subshell or write to encode.log on error
+    local encode_log="${entry_folder}/encode.log"
+    if nice -n 19 ionice -c 3 ffmpeg -hide_banner -loglevel error \
       -i "${temp_raw}" \
       ${vf_arg} \
       -c:v "${vcodec}" -preset "${vpreset}" -crf "${vcrf}" -g 240 -pix_fmt yuv420p \
+      ${extra_opts[@]+"${extra_opts[@]}"} \
+      ${af_arg} \
       -c:a "${acodec}" -ac "${achannels}" -b:a "${abitrate}" -application voip \
-      "${final_out}" >/dev/null 2>&1 && rm -f "${temp_raw}"
+      "${final_out}" > "${encode_log}" 2>&1; then
+      rm -f "${temp_raw}" "${encode_log}"
+    else
+      notify-send "vj error" "Encoding failed for ${timestamp}. Check ${encode_log}" 2>/dev/null || true
+      return 1
+    fi
 
     if [ "${do_encrypt}" = "true" ]; then
       # Encrypt video
@@ -510,16 +553,16 @@ cmd_import() {
         verbose=true
         shift
         ;;
-      terry|balanced|hq)
-        profile="$1"
-        shift
-        ;;
       -*)
         echo "Unknown option: $1"
         return 1
         ;;
       *)
-        specified_files+=("$1")
+        if [ -f "$1" ]; then
+          specified_files+=("$1")
+        else
+          profile="$1"
+        fi
         shift
         ;;
     esac
@@ -575,8 +618,8 @@ cmd_import() {
 
   local params
   params=$(get_profile_params "${profile}")
-  local res fps vcodec vpreset vcrf acodec achannels abitrate vfilter
-  read -r res fps vcodec vpreset vcrf acodec achannels abitrate vfilter <<< "${params}"
+  local res fps vcodec vpreset vcrf acodec achannels abitrate vfilter afilter extra_flags
+  read -r res fps vcodec vpreset vcrf acodec achannels abitrate vfilter afilter extra_flags <<< "${params}"
 
   local gpg_auth
   gpg_auth=$(get_gpg_auth_flags)
@@ -666,8 +709,23 @@ EOF
     echo "Compressing [${profile}] ${bname} -> ${timestamp}..."
 
     local vf_arg=""
-    if [ "${vfilter}" != "null" ]; then
+    if [ -n "${vfilter:-}" ] && [ "${vfilter}" != "null" ]; then
       vf_arg="-vf ${vfilter}"
+    fi
+
+    local af_arg=""
+    if [ -n "${afilter:-}" ] && [ "${afilter}" != "null" ]; then
+      af_arg="-af ${afilter}"
+    fi
+
+    local extra_opts=()
+    if [ -n "${extra_flags:-}" ] && [ "${extra_flags}" != "null" ]; then
+      read -ra extra_opts <<< "${extra_flags}"
+    fi
+    if [ -n "${EXTRA_FFMPEG_FLAGS:-}" ]; then
+      local global_extra=()
+      read -ra global_extra <<< "${EXTRA_FFMPEG_FLAGS}"
+      extra_opts+=("${global_extra[@]}")
     fi
 
     local log_arg="-loglevel quiet"
@@ -679,6 +737,8 @@ EOF
       -i "${raw_file}" \
       ${vf_arg} \
       -c:v "${vcodec}" -preset "${vpreset}" -crf "${vcrf}" -g 240 -pix_fmt yuv420p \
+      ${extra_opts[@]+"${extra_opts[@]}"} \
+      ${af_arg} \
       -c:a "${acodec}" -ac "${achannels}" -b:a "${abitrate}" -application voip \
       "${final_out}" >/dev/null 2>&1
 
@@ -1311,12 +1371,97 @@ cmd_stats() {
   echo "Recorded Days:  ${unique_days}"
 }
 
+# --- Command: Profiles ---
+cmd_profiles() {
+  echo "vj Compression Profiles:"
+  echo ""
+  printf "%-12s %-18s %-18s %-18s %-16s %-16s\n" "PROFILE" "RESOLUTION & FPS" "VIDEO (AV1)" "AUDIO (OPUS)" "EST. (10 MIN)" "EST. (1 HOUR)"
+  printf "%-12s %-18s %-18s %-18s %-16s %-16s\n" "------------" "------------------" "------------------" "------------------" "----------------" "----------------"
+  printf "%-12s %-18s %-18s %-18s %-16s %-16s\n" "potato" "320x240 @ 10fps" "SVT-AV1 CRF 48" "10 kbps (Mono)" "~2.0 MB" "~12 MB"
+  printf "%-12s %-18s %-18s %-18s %-16s %-16s\n" "compact" "480x360 @ 12fps" "SVT-AV1 CRF 44" "12 kbps (Mono)" "~4.5 MB" "~27 MB"
+  printf "%-12s %-18s %-18s %-18s %-16s %-16s\n" "terry (*)" "640x480 @ 15fps" "SVT-AV1 CRF 38" "14 kbps (Mono)" "~8.0 MB" "~48 MB"
+  printf "%-12s %-18s %-18s %-18s %-16s %-16s\n" "balanced" "1280x720 @ 24fps" "SVT-AV1 CRF 30" "32 kbps (Stereo)" "~22 MB" "~130 MB"
+  printf "%-12s %-18s %-18s %-18s %-16s %-16s\n" "hq" "1920x1080 @ 30fps" "SVT-AV1 CRF 24" "64 kbps (Stereo)" "~60 MB" "~360 MB"
+
+  # Detect user-defined profiles in environment / config.env
+  local custom_found=false
+  local env_vars
+  env_vars=$(compgen -v PROFILE_ 2>/dev/null || true)
+  if [ -n "${env_vars}" ]; then
+    while IFS= read -r var_name; do
+      local pname
+      pname=$(echo "${var_name#PROFILE_}" | tr '[:upper:]' '[:lower:]')
+      if [[ "$pname" != "potato" && "$pname" != "compact" && "$pname" != "terry" && "$pname" != "balanced" && "$pname" != "hq" && "$pname" != "default" && "$pname" != "micro" && "$pname" != "ultra" ]]; then
+        if [ "${custom_found}" = "false" ]; then
+          echo ""
+          echo "User-Defined Profiles (from ${CONFIG_FILE}):"
+          printf "%-12s %-18s %-18s %-18s %-16s %-16s\n" "PROFILE" "RESOLUTION & FPS" "VIDEO (AV1)" "AUDIO (OPUS)" "EST. (10 MIN)" "EST. (1 HOUR)"
+          printf "%-12s %-18s %-18s %-18s %-16s %-16s\n" "------------" "------------------" "------------------" "------------------" "----------------" "----------------"
+          custom_found=true
+        fi
+        local val="${!var_name}"
+        local cres cfps cvcodec cvpreset cvcrf cacodec cachannels cabitrate _
+        read -r cres cfps cvcodec cvpreset cvcrf cacodec cachannels cabitrate _ <<< "$val"
+        printf "%-12s %-18s %-18s %-18s %-16s %-16s\n" "${pname}" "${cres} @ ${cfps}fps" "${cvcodec} CRF ${cvcrf}" "${cabitrate} (${cacodec})" "Custom" "Custom"
+      fi
+    done <<< "${env_vars}"
+  fi
+
+  echo ""
+  echo "(*) Default profile. Change with DEFAULT_PROFILE=\"...\" in ${CONFIG_FILE}"
+  echo "Define custom profiles in ${CONFIG_FILE} via PROFILE_<NAME>=\"...\""
+}
+
+# --- Command: Config ---
+cmd_config() {
+  if [ ! -f "${CONFIG_FILE}" ]; then
+    mkdir -p "${CONFIG_DIR}"
+    cat <<'EOF' > "${CONFIG_FILE}"
+# ==============================================================================
+#  vj configuration file (~/.config/vj/config.env)
+# ==============================================================================
+
+# Storage directory for journal entries
+JOURNAL_DIR="$HOME/Videos/Journal/entries"
+
+# Calendar system: 'jalali' (1405-05-26 via native jdate) or 'gregorian' (2026-08-17)
+DATE_CALENDAR="jalali"
+
+# Default compression profile ('potato', 'compact', 'terry', 'balanced', 'hq')
+DEFAULT_PROFILE="terry"
+
+# Hardware capture devices
+CAMERA_DEV="/dev/video0"
+AUDIO_SRC="default"
+EDITOR="nvim"
+
+# Keyless encryption (optional):
+# KEY_FILE="$HOME/.config/vj/key"
+# VJ_PASSPHRASE=""
+
+# ==============================================================================
+# Custom Profiles & FFmpeg Overrides
+# ==============================================================================
+# Define custom profiles using the format:
+# PROFILE_<NAME>="<res> <fps> <vcodec> <vpreset> <vcrf> <acodec> <achannels> <abitrate> <vfilter> <afilter> [extra_flags]"
+#
+# Examples:
+# PROFILE_MYPOTATO="320x240 10 libsvtav1 4 48 libopus 1 10k scale=320:240,fps=10,hqdn3d=5:4:7:5,unsharp=3:3:0.5 highpass=f=80,loudnorm=I=-16:TP=-1.5:LRA=11 -svtav1-params:tune=0:film-grain=0"
+# PROFILE_STUDIO="1280x720 30 libsvtav1 6 26 libopus 2 48k scale=1280:720,fps=30,hqdn3d=1:1:2:2 loudnorm=I=-16:TP=-1.5:LRA=11 -svtav1-params:tune=0"
+#
+# Global FFmpeg flags appended to background encoding:
+# EXTRA_FFMPEG_FLAGS=""
+EOF
+  fi
+  "${EDITOR}" "${CONFIG_FILE}"
+}
+
 # --- Internal Completion Generators (Embedded zero-dependency) ---
 gen_fish_completion() {
   cat <<'EOF'
 # Fish completion for vj
 
-set -l commands record play preview list random encrypt decrypt stats config import inbox-server preview-inbox completions help
+set -l commands record play preview list random encrypt decrypt stats profiles config import inbox-server preview-inbox completions help
 
 complete -c vj -f
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a record -d "Record a new video entry"
@@ -1329,11 +1474,12 @@ complete -c vj -n "not __fish_seen_subcommand_from $commands" -a random -d "Play
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a encrypt -d "Encrypt entry with GPG AES-256"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a decrypt -d "Decrypt entry to plaintext"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a stats -d "Show summary stats and storage"
+complete -c vj -n "not __fish_seen_subcommand_from $commands" -a profiles -d "List available compression profiles"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a config -d "Edit configuration file"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a completions -d "Output or install shell completions"
 
 # Record & Import options
-complete -c vj -n "__fish_seen_subcommand_from record import" -s p -l profile -x -a "terry balanced hq" -d "Compression profile"
+complete -c vj -n "__fish_seen_subcommand_from record import" -s p -l profile -x -a "potato compact terry balanced hq" -d "Compression profile"
 complete -c vj -n "__fish_seen_subcommand_from record import" -s e -l encrypt -d "Encrypt with GPG AES-256"
 complete -c vj -n "__fish_seen_subcommand_from record import" -l no-encrypt -d "Save unencrypted"
 complete -c vj -n "__fish_seen_subcommand_from record import" -s t -l title -r -d "Title of entry"
@@ -1361,8 +1507,8 @@ _vj_completions() {
     local cur prev words cword
     _init_completion || return
 
-    local commands="record play preview list random encrypt decrypt stats config import inbox-server preview-inbox completions help"
-    local profiles="terry balanced hq"
+    local commands="record play preview list random encrypt decrypt stats profiles config import inbox-server preview-inbox completions help"
+    local profiles="potato compact terry balanced hq"
 
     if [[ $cword -eq 1 ]]; then
         COMPREPLY=( $(compgen -W "${commands}" -- "${cur}") )
@@ -1374,14 +1520,14 @@ _vj_completions() {
             if [[ "${prev}" == "-p" || "${prev}" == "--profile" ]]; then
                 COMPREPLY=( $(compgen -W "${profiles}" -- "${cur}") )
             else
-                COMPREPLY=( $(compgen -W "-p --profile -e --encrypt --no-encrypt -t --title --tags -n --note -i --interactive -v --verbose terry balanced hq" -- "${cur}") )
+                COMPREPLY=( $(compgen -W "-p --profile -e --encrypt --no-encrypt -t --title --tags -n --note -i --interactive -v --verbose ${profiles}" -- "${cur}") )
             fi
             ;;
         import)
             if [[ "${prev}" == "-p" || "${prev}" == "--profile" ]]; then
                 COMPREPLY=( $(compgen -W "${profiles}" -- "${cur}") )
             else
-                COMPREPLY=( $(compgen -W "-p --profile -e --encrypt --no-encrypt -t --title --tags -n --note -i --interactive --keep -v --verbose terry balanced hq" -- "${cur}") )
+                COMPREPLY=( $(compgen -W "-p --profile -e --encrypt --no-encrypt -t --title --tags -n --note -i --interactive --keep -v --verbose ${profiles}" -- "${cur}") )
             fi
             ;;
         play|preview)
@@ -1429,6 +1575,7 @@ _vj() {
         'encrypt:Encrypt entries with GPG AES-256'
         'decrypt:Decrypt entries to plaintext'
         'stats:Display storage and recording summary'
+        'profiles:List available compression profiles'
         'config:Open configuration file in editor'
         'completions:Generate or install shell completion scripts'
     )
@@ -1445,7 +1592,7 @@ _vj() {
             case $words[1] in
                 record)
                     _arguments \
-                        '(-p --profile)'{-p,--profile}'[Compression profile]:profile:(terry balanced hq)' \
+                        '(-p --profile)'{-p,--profile}'[Compression profile]:profile:(potato compact terry balanced hq)' \
                         '(-e --encrypt)'{-e,--encrypt}'[Encrypt with GPG AES-256]' \
                         '--no-encrypt[Save unencrypted]' \
                         '(-t --title)'{-t,--title}'[Title of entry]:title:' \
@@ -1456,7 +1603,7 @@ _vj() {
                     ;;
                 import)
                     _arguments \
-                        '(-p --profile)'{-p,--profile}'[Compression profile]:profile:(terry balanced hq)' \
+                        '(-p --profile)'{-p,--profile}'[Compression profile]:profile:(potato compact terry balanced hq)' \
                         '(-e --encrypt)'{-e,--encrypt}'[Encrypt with GPG AES-256]' \
                         '--no-encrypt[Save unencrypted]' \
                         '(-t --title)'{-t,--title}'[Title of entry]:title:' \
@@ -1566,6 +1713,9 @@ Vault Management:
   stats
       Display storage and recording summary
   
+  profiles
+      List all available compression profiles and estimated disk footprints
+  
   config
       Open configuration file in \$EDITOR (${EDITOR})
 
@@ -1577,7 +1727,7 @@ Options:
   -h, --help       Show this help message
 
 Configuration:
-  Edit ${CONFIG_FILE} to customize storage directory, inbox folder, Jalali calendar, key file, camera, etc.
+  Edit ${CONFIG_FILE} to customize storage directory, inbox folder, Jalali calendar, key file, custom profiles, etc.
 EOF
 }
 
@@ -1626,12 +1776,17 @@ case "${1:-}" in
   stats|stat|s)
     cmd_stats
     ;;
+  profiles|profile)
+    shift
+    cmd_profiles "$@"
+    ;;
   completions|completion)
     shift
     cmd_completions "$@"
     ;;
   config|cfg)
-    "${EDITOR}" "${CONFIG_FILE}"
+    shift
+    cmd_config "$@"
     ;;
   help|-h|--help)
     cmd_help

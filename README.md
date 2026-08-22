@@ -82,6 +82,7 @@ vj stats
 | **`vj encrypt <id\|all>`** | Encrypt entry or whole vault with AES-256 | `vj encrypt all` |
 | **`vj decrypt <id\|all>`** | Decrypt entry or whole vault to plaintext | `vj decrypt all` |
 | **`vj stats`** | Display streak, total entries, and storage footprint | `vj stats` |
+| **`vj profiles`** | List available built-in & custom compression profiles | `vj profiles` |
 | **`vj config`** | Open configuration in `$EDITOR` (`nvim`/`vim`) | `vj config` |
 | **`vj completions`** | Output or auto-install shell completions | `vj completions install` |
 
@@ -92,11 +93,40 @@ vj stats
 
 ## Compression Profiles
 
-| Profile | Resolution & FPS | Video Codec & CRF | Audio Codec & Bitrate | Approx. Size |
-| :--- | :--- | :--- | :--- | :--- |
-| **`terry`** *(default)* | 640×480 @ 24fps | SVT-AV1 (Preset 4, CRF 34, `hqdn3d`) | Opus Mono (20 kbps speech) | **~10–15 MB / hour** |
-| **`balanced`** | 1280×720 @ 25fps | SVT-AV1 (Preset 6, CRF 28, `hqdn3d`) | Opus Stereo (48 kbps) | **~60–90 MB / hour** |
-| **`hq`** | 1920×1080 @ 30fps | SVT-AV1 (Preset 6, CRF 22) | Opus Stereo (96 kbps) | **~250–400 MB / hour** |
+All profiles automatically apply speech normalization (`loudnorm`) and rumble removal (`highpass`), with SVT-AV1 visual quality psychovisual tuning (`tune=0`).
+
+| Profile | Resolution & FPS | Video Codec & Settings | Audio (Opus) | Est. (10 min) | Est. (1 hour) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **`potato`** | 320×240 @ 10fps | SVT-AV1 (CRF 48, `hqdn3d`, `unsharp`) | 10 kbps Mono VoIP | **~2.0 MB** | **~12 MB** |
+| **`compact`** | 480×360 @ 12fps | SVT-AV1 (CRF 44, `hqdn3d`, `unsharp`) | 12 kbps Mono VoIP | **~4.5 MB** | **~27 MB** |
+| **`terry`** *(default)* | 640×480 @ 15fps | SVT-AV1 (CRF 38, `hqdn3d`, `unsharp`) | 14 kbps Mono VoIP | **~8.0 MB** | **~48 MB** |
+| **`balanced`** | 1280×720 @ 24fps | SVT-AV1 (CRF 30, `hqdn3d`) | 32 kbps Stereo | **~22 MB** | **~130 MB** |
+| **`hq`** | 1920×1080 @ 30fps | SVT-AV1 (CRF 24) | 64 kbps Stereo | **~60 MB** | **~360 MB** |
+
+---
+
+## Custom Profiles & FFmpeg Customization
+
+Users can easily define their own custom compression profiles or override FFmpeg parameters directly in [`~/.config/vj/config.env`](file:///home/mili/.config/vj/config.env):
+
+```bash
+# Format: PROFILE_<NAME>="<res> <fps> <vcodec> <vpreset> <vcrf> <acodec> <achannels> <abitrate> <vfilter> <afilter> [extra_flags]"
+
+# Example 1: Ultra-compact retro mode
+PROFILE_RETRO="320x240 10 libsvtav1 4 48 libopus 1 10k scale=320:240,fps=10,hqdn3d=5:4:7:5,unsharp=3:3:0.5 highpass=f=80,loudnorm=I=-16:TP=-1.5:LRA=11 -svtav1-params:tune=0:film-grain=0"
+
+# Example 2: Studio 1080p mode
+PROFILE_STUDIO="1920x1080 30 libsvtav1 6 26 libopus 2 64k scale=1920:1080,fps=30,hqdn3d=1:1:2:2 loudnorm=I=-16:TP=-1.5:LRA=11 -svtav1-params:tune=0"
+
+# Global flags appended to all background encodings (optional):
+EXTRA_FFMPEG_FLAGS=""
+```
+
+Use your custom profile immediately:
+```bash
+vj record -p retro
+vj import -p studio
+```
 
 ---
 
@@ -115,7 +145,7 @@ DATE_CALENDAR="jalali"
 # KEY_FILE="$HOME/.config/vj/key"
 # VJ_PASSPHRASE=""
 
-# Default compression profile ('terry', 'balanced', 'hq')
+# Default compression profile ('potato', 'compact', 'terry', 'balanced', 'hq', or your custom profile)
 DEFAULT_PROFILE="terry"
 
 # Hardware capture devices

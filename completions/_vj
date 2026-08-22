@@ -10,6 +10,8 @@ _vj() {
     local -a commands
     commands=(
         'record:Record a new video entry'
+        'import:Import video files from inbox or path'
+        'inbox-server:Start local mobile upload web server'
         'play:Play entry in mpv'
         'preview:Display metadata and note for an entry'
         'list:List all journal entries'
@@ -17,6 +19,7 @@ _vj() {
         'encrypt:Encrypt entries with GPG AES-256'
         'decrypt:Decrypt entries to plaintext'
         'stats:Display storage and recording summary'
+        'profiles:List available compression profiles'
         'config:Open configuration file in editor'
         'completions:Generate or install shell completion scripts'
     )
@@ -33,7 +36,7 @@ _vj() {
             case $words[1] in
                 record)
                     _arguments \
-                        '(-p --profile)'{-p,--profile}'[Compression profile]:profile:(terry balanced hq)' \
+                        '(-p --profile)'{-p,--profile}'[Compression profile]:profile:(potato compact terry balanced hq)' \
                         '(-e --encrypt)'{-e,--encrypt}'[Encrypt with GPG AES-256]' \
                         '--no-encrypt[Save unencrypted]' \
                         '(-t --title)'{-t,--title}'[Title of entry]:title:' \
@@ -41,6 +44,19 @@ _vj() {
                         '(-n --note)'{-n,--note}'[Open editor for note]' \
                         '(-i --interactive)'{-i,--interactive}'[Prompt for title and note]' \
                         '(-v --verbose)'{-v,--verbose}'[Verbose output]'
+                    ;;
+                import)
+                    _arguments \
+                        '(-p --profile)'{-p,--profile}'[Compression profile]:profile:(potato compact terry balanced hq)' \
+                        '(-e --encrypt)'{-e,--encrypt}'[Encrypt with GPG AES-256]' \
+                        '--no-encrypt[Save unencrypted]' \
+                        '(-t --title)'{-t,--title}'[Title of entry]:title:' \
+                        '--tags[Comma-separated tags]:tags:' \
+                        '(-n --note)'{-n,--note}'[Open editor for note]' \
+                        '(-i --interactive)'{-i,--interactive}'[Prompt for title and note]' \
+                        '--keep[Keep raw file in inbox]' \
+                        '(-v --verbose)'{-v,--verbose}'[Verbose output]' \
+                        '*:file:_files'
                     ;;
                 play|preview)
                     _arguments \
