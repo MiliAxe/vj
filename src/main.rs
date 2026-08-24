@@ -260,12 +260,12 @@ async fn main() -> Result<()> {
             Commands::Completions { target } => {
                 let mut cmd = Cli::command();
                 match target {
-                    CompletionTarget::Bash => completions::print_completions(clap_complete::Shell::Bash, &mut cmd),
-                    CompletionTarget::Zsh => completions::print_completions(clap_complete::Shell::Zsh, &mut cmd),
-                    CompletionTarget::Fish => completions::print_completions(clap_complete::Shell::Fish, &mut cmd),
-                    CompletionTarget::Powershell => completions::print_completions(clap_complete::Shell::PowerShell, &mut cmd),
-                    CompletionTarget::Elvish => completions::print_completions(clap_complete::Shell::Elvish, &mut cmd),
-                    CompletionTarget::Install => completions::install_completions(&mut cmd)?,
+                    CompletionTarget::Bash => completions::print_custom_completion("bash", &mut cmd),
+                    CompletionTarget::Zsh => completions::print_custom_completion("zsh", &mut cmd),
+                    CompletionTarget::Fish => completions::print_custom_completion("fish", &mut cmd),
+                    CompletionTarget::Powershell => completions::print_custom_completion("powershell", &mut cmd),
+                    CompletionTarget::Elvish => completions::print_custom_completion("elvish", &mut cmd),
+                    CompletionTarget::Install => completions::install_completions()?,
                 }
             }
 
