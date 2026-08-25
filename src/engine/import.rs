@@ -22,6 +22,7 @@ pub struct ImportOptions {
     pub interactive: bool,
     pub keep: bool,
     pub verbose: bool,
+    pub denoise: Option<bool>,
     pub overlay: Option<bool>,
     pub overlay_style: Option<String>,
     pub overlay_font: Option<String>,
@@ -423,10 +424,19 @@ pub fn execute_import(opts: ImportOptions, config: &Config) -> Result<()> {
             }
         }
 
+        let denoise_enabled = opts.denoise.unwrap_or(config.denoise);
+        let mut af_parts = Vec::new();
+        if denoise_enabled {
+            af_parts.push("afftdn=nf=-25".to_string());
+        }
         if let Some(ref af) = profile_spec.afilter {
             if !af.is_empty() && af != "null" {
-                cmd.arg("-af").arg(af);
+                af_parts.push(af.clone());
             }
+        }
+
+        if !af_parts.is_empty() {
+            cmd.arg("-af").arg(af_parts.join(","));
         }
 
         cmd.arg("-c:a")

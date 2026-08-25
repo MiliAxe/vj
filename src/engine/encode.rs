@@ -17,6 +17,7 @@ pub fn run_encoding(
     overlay_cfg: &OverlayConfig,
     title_opt: Option<&str>,
     config: &Config,
+    denoise: bool,
     verbose: bool,
 ) -> Result<()> {
     let final_out = entry_dir.join("video.mkv");
@@ -84,10 +85,19 @@ pub fn run_encoding(
         }
     }
 
+    // Build audio filter graph including optional afftdn noise reduction
+    let mut af_parts = Vec::new();
+    if denoise {
+        af_parts.push("afftdn=nf=-25".to_string());
+    }
     if let Some(ref af) = profile.afilter {
         if !af.is_empty() && af != "null" {
-            cmd.arg("-af").arg(af);
+            af_parts.push(af.clone());
         }
+    }
+
+    if !af_parts.is_empty() {
+        cmd.arg("-af").arg(af_parts.join(","));
     }
 
     cmd.arg("-c:a")
@@ -170,6 +180,7 @@ pub fn spawn_detached_encoder(
     entry_dir: &Path,
     profile_name: &str,
     do_encrypt: bool,
+    denoise: bool,
     overlay_cfg: &OverlayConfig,
 ) -> Result<u32> {
     let current_exe = std::env::current_exe().context("Failed to get current executable path")?;
@@ -181,6 +192,10 @@ pub fn spawn_detached_encoder(
 
     if do_encrypt {
         cmd.arg("--encrypt");
+    }
+
+    if denoise {
+        cmd.arg("--denoise");
     }
 
     if overlay_cfg.enabled {

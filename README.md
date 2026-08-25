@@ -109,12 +109,13 @@ vj record -O --overlay-font silkscreen --overlay-style camcorder_white --font-si
 | Command | Description | Example |
 | :--- | :--- | :--- |
 | **`vj record`** | Start live webcam capture & preview | `vj record -p terry` |
+| **`vj record -D`** | Record with microphone noise suppression (`afftdn`) | `vj record -D` |
 | **`vj record -t "..."`** | Record with title, tags, or notes | `vj record -t "Life Update" --tags "dev,log" -n` |
 | **`vj record -O`** | Record with retro OSD date/time overlay | `vj record -O --overlay-font silkscreen --font-size 20` |
 | **`vj import`** | Multi-select import from inbox with video preview pane | `vj import` |
-| **`vj import [files...]`** | Import specific videos with metadata conversion | `vj import ~/Downloads/vid.mp4 -t "Trip"` |
+| **`vj import -D [files...]`** | Import videos with microphone noise suppression | `vj import ~/Downloads/vid.mp4 -D` |
 | **`vj inbox-server`** | Start local upload server with phone QR code | `vj inbox-server 8080` |
-| **`vj play`** | Interactive `fzf` browser with live metadata preview | `vj play` |
+| **`vj play`** | Interactive `fzf` browser with live storyboard & metadata | `vj play` |
 | **`vj play <id>`** | Play specific entry directly in `mpv` | `vj play 1405-05-30_12-33-03` |
 | **`vj preview <id>`** | Print metadata, note, and terminal storyboard | `vj preview 1405-05-30_12-33-03` |
 | **`vj preview-inbox <file>`** | Inspect format, resolution, codec, and duration | `vj preview-inbox ~/video.mp4` |
@@ -159,6 +160,9 @@ date_calendar = "jalali"
 
 # Default compression profile ("terry", "potato", "compact", "balanced", "hq")
 default_profile = "terry"
+
+# Audio Noise Suppression (afftdn)
+denoise = false                        # Set to true to automatically denoise all audio
 
 # Retro OSD Overlay Settings (disabled by default)
 retro_overlay = false                  # Overlays are completely OFF by default

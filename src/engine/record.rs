@@ -19,6 +19,7 @@ pub struct RecordOptions {
     pub interactive: bool,
     pub verbose: bool,
     pub wait: bool,
+    pub denoise: Option<bool>,
     pub overlay: Option<bool>,
     pub overlay_style: Option<String>,
     pub overlay_font: Option<String>,
@@ -256,6 +257,8 @@ pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
         show_title: overlay_title,
     };
 
+    let denoise_enabled = opts.denoise.unwrap_or(config.denoise);
+
     // Step 3: Compression + Encryption
     if opts.wait {
         println!("Encoding in foreground...");
@@ -267,6 +270,7 @@ pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
             &overlay_cfg,
             Some(&final_title),
             config,
+            denoise_enabled,
             opts.verbose,
         )?;
         println!("[✓] Entry saved and encoded to {}", entry_folder.display());
@@ -276,6 +280,7 @@ pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
             &entry_folder,
             &resolved_name,
             do_encrypt,
+            denoise_enabled,
             &overlay_cfg,
         ) {
             Ok(pid) => {
@@ -295,6 +300,7 @@ pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
                     &overlay_cfg,
                     Some(&final_title),
                     config,
+                    denoise_enabled,
                     opts.verbose,
                 )?;
             }

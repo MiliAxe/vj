@@ -41,6 +41,9 @@ pub struct Config {
     #[serde(default)]
     pub retro_overlay: bool,
 
+    #[serde(default)]
+    pub denoise: bool,
+
     #[serde(default = "default_overlay_style")]
     pub overlay_style: String,
 
@@ -128,6 +131,7 @@ impl Default for Config {
             inbox_port: default_inbox_port(),
             auto_encrypt: false,
             retro_overlay: false,
+            denoise: false,
             overlay_style: default_overlay_style(),
             overlay_font: default_overlay_font(),
             overlay_font_size: None,

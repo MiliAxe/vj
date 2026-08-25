@@ -62,6 +62,8 @@ complete -c vj -n "__fish_seen_subcommand_from record import" -l tags -r -d "Com
 complete -c vj -n "__fish_seen_subcommand_from record import" -s n -l note -d "Open editor for notes"
 complete -c vj -n "__fish_seen_subcommand_from record import" -s i -l interactive -d "Prompt for title and note"
 complete -c vj -n "__fish_seen_subcommand_from record" -l wait -l no-bg -d "Encode in foreground"
+complete -c vj -n "__fish_seen_subcommand_from record import" -s D -l denoise -d "Enable microphone noise reduction (afftdn)"
+complete -c vj -n "__fish_seen_subcommand_from record import" -l no-denoise -d "Disable microphone noise reduction"
 complete -c vj -n "__fish_seen_subcommand_from record import" -s O -l overlay -d "Enable retro OSD overlay"
 complete -c vj -n "__fish_seen_subcommand_from record import" -l no-overlay -d "Disable retro OSD overlay"
 complete -c vj -n "__fish_seen_subcommand_from record import" -l overlay-style -x -a "vhs_yellow camcorder_white green amber cyan" -d "Retro OSD color style"
@@ -104,7 +106,7 @@ pub fn get_bash_completion() -> &'static str {
             elif [[ "${prev}" == "--overlay-font" ]]; then
                 COMPREPLY=( $(compgen -W "${fonts}" -- "${cur}") )
             else
-                COMPREPLY=( $(compgen -W "-p --profile -e --encrypt --no-encrypt -t --title --tags -n --note -i --interactive --wait --no-bg -O --overlay --no-overlay --overlay-style --overlay-font --font-size --overlay-font-size --overlay-title --no-overlay-title -v --verbose ${profiles}" -- "${cur}") )
+                COMPREPLY=( $(compgen -W "-p --profile -e --encrypt --no-encrypt -t --title --tags -n --note -i --interactive --wait --no-bg -D --denoise --no-denoise -O --overlay --no-overlay --overlay-style --overlay-font --font-size --overlay-font-size --overlay-title --no-overlay-title -v --verbose ${profiles}" -- "${cur}") )
             fi
             ;;
         import)
@@ -115,7 +117,7 @@ pub fn get_bash_completion() -> &'static str {
             elif [[ "${prev}" == "--overlay-font" ]]; then
                 COMPREPLY=( $(compgen -W "${fonts}" -- "${cur}") )
             else
-                COMPREPLY=( $(compgen -W "-p --profile -e --encrypt --no-encrypt -t --title --tags -n --note -i --interactive --keep -O --overlay --no-overlay --overlay-style --overlay-font --font-size --overlay-font-size --overlay-title --no-overlay-title -v --verbose ${profiles}" -- "${cur}") )
+                COMPREPLY=( $(compgen -W "-p --profile -e --encrypt --no-encrypt -t --title --tags -n --note -i --interactive --keep -D --denoise --no-denoise -O --overlay --no-overlay --overlay-style --overlay-font --font-size --overlay-font-size --overlay-title --no-overlay-title -v --verbose ${profiles}" -- "${cur}") )
             fi
             ;;
         play|preview)
@@ -200,6 +202,8 @@ _vj() {
                         '(-i --interactive)'{-i,--interactive}'[Prompt for title and note]' \
                         '--wait[Encode in foreground]' \
                         '--no-bg[Encode in foreground]' \
+                        '(-D --denoise)'{-D,--denoise}'[Enable microphone noise reduction (afftdn)]' \
+                        '--no-denoise[Disable microphone noise reduction]' \
                         '(-O --overlay)'{-O,--overlay}'[Enable retro OSD overlay]' \
                         '--no-overlay[Disable retro OSD overlay]' \
                         '--overlay-style[Retro OSD color style]:style:(vhs_yellow camcorder_white green amber cyan)' \
@@ -220,6 +224,8 @@ _vj() {
                         '(-n --note)'{-n,--note}'[Open editor for note]' \
                         '(-i --interactive)'{-i,--interactive}'[Prompt for title and note]' \
                         '--keep[Keep raw file in inbox]' \
+                        '(-D --denoise)'{-D,--denoise}'[Enable microphone noise reduction (afftdn)]' \
+                        '--no-denoise[Disable microphone noise reduction]' \
                         '(-O --overlay)'{-O,--overlay}'[Enable retro OSD overlay]' \
                         '--no-overlay[Disable retro OSD overlay]' \
                         '--overlay-style[Retro OSD color style]:style:(vhs_yellow camcorder_white green amber cyan)' \

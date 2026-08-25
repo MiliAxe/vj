@@ -36,6 +36,14 @@ async fn main() -> Result<()> {
                     None
                 };
 
+                let denoise_opt = if args.denoise {
+                    Some(true)
+                } else if args.no_denoise {
+                    Some(false)
+                } else {
+                    None
+                };
+
                 let overlay_opt = if args.overlay {
                     Some(true)
                 } else if args.no_overlay {
@@ -61,6 +69,7 @@ async fn main() -> Result<()> {
                     interactive: args.interactive,
                     verbose: cli.verbose,
                     wait: args.wait,
+                    denoise: denoise_opt,
                     overlay: overlay_opt,
                     overlay_style: args.overlay_style,
                     overlay_font: args.overlay_font,
@@ -74,6 +83,14 @@ async fn main() -> Result<()> {
                 let encrypt_opt = if args.encrypt {
                     Some(true)
                 } else if args.no_encrypt {
+                    Some(false)
+                } else {
+                    None
+                };
+
+                let denoise_opt = if args.denoise {
+                    Some(true)
+                } else if args.no_denoise {
                     Some(false)
                 } else {
                     None
@@ -105,6 +122,7 @@ async fn main() -> Result<()> {
                     interactive: args.interactive,
                     keep: args.keep,
                     verbose: cli.verbose,
+                    denoise: denoise_opt,
                     overlay: overlay_opt,
                     overlay_style: args.overlay_style,
                     overlay_font: args.overlay_font,
@@ -333,6 +351,7 @@ async fn main() -> Result<()> {
                 entry_dir,
                 profile,
                 encrypt,
+                denoise,
                 overlay,
                 overlay_style,
                 overlay_font,
@@ -375,6 +394,7 @@ async fn main() -> Result<()> {
                     &overlay_cfg,
                     title_opt.as_deref(),
                     &config,
+                    denoise,
                     false,
                 )?;
             }

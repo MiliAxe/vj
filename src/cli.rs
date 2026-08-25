@@ -169,6 +169,8 @@ pub enum Commands {
         #[arg(long)]
         encrypt: bool,
         #[arg(long)]
+        denoise: bool,
+        #[arg(long)]
         overlay: bool,
         #[arg(long)]
         overlay_style: Option<String>,
@@ -211,6 +213,12 @@ pub struct RecordArgs {
 
     #[arg(long, aliases = ["no-bg"], help = "Encode in foreground instead of background")]
     pub wait: bool,
+
+    #[arg(short = 'D', long, help = "Enable microphone background noise suppression (afftdn)")]
+    pub denoise: bool,
+
+    #[arg(long, help = "Disable microphone background noise suppression")]
+    pub no_denoise: bool,
 
     #[arg(short = 'O', long, help = "Enable retro VHS/camcorder OSD date overlay")]
     pub overlay: bool,
@@ -262,6 +270,12 @@ pub struct ImportArgs {
 
     #[arg(long, help = "Keep raw file in inbox")]
     pub keep: bool,
+
+    #[arg(short = 'D', long, help = "Enable microphone background noise suppression (afftdn)")]
+    pub denoise: bool,
+
+    #[arg(long, help = "Disable microphone background noise suppression")]
+    pub no_denoise: bool,
 
     #[arg(short = 'O', long, help = "Enable retro VHS/camcorder OSD date overlay")]
     pub overlay: bool,
