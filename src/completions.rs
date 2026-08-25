@@ -239,7 +239,7 @@ _vj() {
                 delete)
                     _arguments \
                         '(-f --force)'{-f,--force}'[Skip confirmation]' \
-                        '1:entry:_vj_entries'
+                        '*:entry:_vj_entries'
                     ;;
                 encrypt|decrypt)
                     _arguments \

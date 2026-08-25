@@ -5,6 +5,7 @@ use colored::*;
 use dialoguer::Confirm;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -340,12 +341,105 @@ pub fn print_stats(entries: &[Entry], entries_dir: &Path, inbox_dir: &Path, cal:
     println!("Recorded Days:  {}", days_recorded.len());
 }
 
-pub fn delete_entry(entry: &Entry, force: bool) -> Result<()> {
+
+pub fn execute_delete(
+    entry_ids: Vec<String>,
+    force: bool,
+    entries_path: &Path,
+    temp_path: &Path,
+) -> Result<()> {
+    let entries = load_entries(entries_path, temp_path)?;
+    if entries.is_empty() {
+        println!("No entries found in {}", entries_path.display());
+        return Ok(());
+    }
+
+    let mut target_ids = entry_ids;
+
+    // If no target IDs given, run interactive fzf multi-select browser
+    if target_ids.is_empty() {
+        if std::io::stdin().is_terminal() && which::which("fzf").is_ok() {
+            let current_exe = std::env::current_exe()?;
+            let preview_cmd = format!("{} preview {{1}}", current_exe.display());
+
+            let mut fzf_cmd = std::process::Command::new("fzf");
+            fzf_cmd
+                .arg("-m")
+                .arg("--prompt=vj delete (TAB to multi-select) > ")
+                .arg("--header=[TAB/Shift-TAB: Multi-select | Enter: Confirm selection | Esc: Cancel]")
+                .arg(format!("--preview={}", preview_cmd))
+                .arg("--preview-window=right:55%:wrap")
+                .arg("--bind=ctrl-j:down,ctrl-k:up,ctrl-d:page-down,ctrl-u:page-up,ctrl-y:preview-up,ctrl-e:preview-down")
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped());
+
+            let mut child = fzf_cmd.spawn().context("Failed to run fzf")?;
+            if let Some(mut stdin) = child.stdin.take() {
+                use std::io::Write;
+                for e in &entries {
+                    let status = if e.is_encrypted { "[GPG]" } else { "[RAW]" };
+                    writeln!(
+                        stdin,
+                        "{:<22} {:<10} {:<8} {:<32} {}",
+                        e.id,
+                        status,
+                        e.formatted_size(),
+                        e.title(),
+                        e.tags_string()
+                    )?;
+                }
+            }
+
+            let output = child.wait_with_output()?;
+            if output.status.success() {
+                let stdout_str = String::from_utf8_lossy(&output.stdout);
+                for line in stdout_str.lines() {
+                    if let Some(first_word) = line.split_whitespace().next() {
+                        target_ids.push(first_word.to_string());
+                    }
+                }
+            } else {
+                println!("Deletion cancelled.");
+                return Ok(());
+            }
+        } else {
+            anyhow::bail!("Please specify at least one entry ID to delete (e.g. vj delete <id1> <id2>)");
+        }
+    }
+
+    if target_ids.is_empty() {
+        println!("No entries selected.");
+        return Ok(());
+    }
+
+    // Resolve matching entries
+    let mut to_delete: Vec<&Entry> = Vec::new();
+    for target in &target_ids {
+        if let Some(entry) = find_entry(&entries, target) {
+            if !to_delete.iter().any(|e| e.id == entry.id) {
+                to_delete.push(entry);
+            }
+        } else {
+            eprintln!("Warning: Entry '{}' not found, skipping.", target);
+        }
+    }
+
+    if to_delete.is_empty() {
+        println!("No valid entries found to delete.");
+        return Ok(());
+    }
+
+    // Confirmation prompt (unless force is provided)
     if !force {
-        let prompt = format!(
-            "Are you sure you want to permanently delete entry '{}' ({})?",
-            entry.id, entry.title()
-        );
+        println!("The following {} entry/entries will be permanently deleted:", to_delete.len());
+        for e in &to_delete {
+            println!("  - {}  {}", e.id.bold(), e.title().dimmed());
+        }
+        let prompt = if to_delete.len() == 1 {
+            format!("Are you sure you want to permanently delete '{}'?", to_delete[0].id)
+        } else {
+            format!("Are you sure you want to permanently delete these {} entries?", to_delete.len())
+        };
         let confirmed = Confirm::new()
             .with_prompt(prompt)
             .default(false)
@@ -357,9 +451,53 @@ pub fn delete_entry(entry: &Entry, force: bool) -> Result<()> {
         }
     }
 
-    fs::remove_dir_all(&entry.dir)
-        .with_context(|| format!("Failed to delete entry directory {:?}", entry.dir))?;
+    // Delete directories
+    for entry in to_delete {
+        fs::remove_dir_all(&entry.dir)
+            .with_context(|| format!("Failed to delete entry directory {:?}", entry.dir))?;
+        println!("[✓] Deleted entry '{}'", entry.id);
+    }
 
-    println!("[✓] Deleted entry '{}'", entry.id);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_execute_delete_multiple_entries() {
+        let base_temp = std::env::temp_dir().join(format!("vj_test_del_{}", std::process::id()));
+        let entries_dir = base_temp.join("entries");
+        let temp_dir = base_temp.join("temp");
+        let _ = fs::remove_dir_all(&base_temp);
+        fs::create_dir_all(&entries_dir).unwrap();
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let e1_dir = entries_dir.join("1405-01-01_10-00-00");
+        let e2_dir = entries_dir.join("1405-01-02_10-00-00");
+        let e3_dir = entries_dir.join("1405-01-03_10-00-00");
+        fs::create_dir_all(&e1_dir).unwrap();
+        fs::create_dir_all(&e2_dir).unwrap();
+        fs::create_dir_all(&e3_dir).unwrap();
+
+        fs::write(e1_dir.join("video.mkv"), b"fake").unwrap();
+        fs::write(e2_dir.join("video.mkv"), b"fake").unwrap();
+        fs::write(e3_dir.join("video.mkv"), b"fake").unwrap();
+
+        // Delete e1 and e2 with force=true
+        execute_delete(
+            vec!["1405-01-01_10-00-00".to_string(), "1405-01-02_10-00-00".to_string()],
+            true,
+            &entries_dir,
+            &temp_dir,
+        )
+        .unwrap();
+
+        assert!(!e1_dir.exists());
+        assert!(!e2_dir.exists());
+        assert!(e3_dir.exists());
+
+        let _ = fs::remove_dir_all(&base_temp);
+    }
 }

@@ -222,11 +222,13 @@ async fn main() -> Result<()> {
                 println!("Decryption complete.");
             }
 
-            Commands::Delete { entry_id, force } => {
-                let entries = load_entries(&config.entries_path(), &config.temp_path())?;
-                let entry = find_entry(&entries, &entry_id)
-                    .with_context(|| format!("Entry not found: {}", entry_id))?;
-                entry::delete_entry(entry, force)?;
+            Commands::Delete { entry_ids, force } => {
+                entry::execute_delete(
+                    entry_ids,
+                    force,
+                    &config.entries_path(),
+                    &config.temp_path(),
+                )?;
             }
 
             Commands::Stats => {

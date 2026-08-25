@@ -110,11 +110,11 @@ pub enum Commands {
     #[command(
         name = "delete",
         aliases = ["del", "rm", "remove"],
-        about = "Permanently delete an entry"
+        about = "Permanently delete one or more entries (opens fzf multi-select if empty)"
     )]
     Delete {
-        #[arg(help = "Entry ID to delete")]
-        entry_id: String,
+        #[arg(help = "Entry IDs to delete (opens fzf multi-select if empty)")]
+        entry_ids: Vec<String>,
         #[arg(short, long, help = "Skip confirmation prompt")]
         force: bool,
     },

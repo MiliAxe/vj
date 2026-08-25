@@ -23,7 +23,7 @@ This project is inspired by the King himself, [Terry A. Davis](https://en.wikipe
 - **📅 Native Jalali (Solar Hijri) & Gregorian**: Seamless calendar timestamps calculated natively in Rust with zero lag.
 - **📱 Built-In Mobile Web Upload Server**: Native async HTTP server with embedded drag-and-drop web UI and in-terminal ANSI QR code (`vj inbox-server`).
 - **🔍 Vim-First `fzf` Browser**: Interactive browsing with live metadata & markdown thought note preview panes and dynamic tab completions.
-- **🗑️ Entry Deletion & Vault Management**: Manage, encrypt, decrypt, or permanently delete entries (`vj delete <id>`).
+- **🗑️ Batch Deletion & Interactive `fzf` Vault Management**: Multi-select deletion with live preview panes (`vj delete`) or batch deletion by IDs (`vj delete id1 id2 ...`).
 - **⚙️ Modern TOML Configuration**: Clean XDG-standard configuration at `~/.config/vj/config.toml`.
 - **🐚 Auto Shell Completions**: Native completions for Fish, Bash, Zsh, PowerShell, and Elvish via `clap_complete`.
 
@@ -108,7 +108,9 @@ vj record -O --overlay-font silkscreen --overlay-style camcorder_white --font-si
 | **`vj preview-inbox <file>`** | Inspect format, resolution, codec, and duration | `vj preview-inbox ~/video.mp4` |
 | **`vj list`** | List entries in formatted table (`-q` for raw IDs) | `vj list -q` |
 | **`vj random`** | Jump into a random historical recording | `vj random` |
-| **`vj delete <id>`** | Permanently delete an entry (`-f` to skip prompt) | `vj delete 1405-05-30_12-33-03` |
+| **`vj delete`** | Interactive `fzf` multi-select browser to delete entries | `vj delete` |
+| **`vj delete [ids...]`** | Batch delete one or multiple entries by ID | `vj delete 1405-05-30_12-33-03 1405-05-30_14-00-00` |
+| **`vj delete -f [ids...]`** | Delete entries without confirmation prompt | `vj delete -f 1405-05-30_12-33-03` |
 | **`vj encrypt <id\|all>`** | Encrypt entry or whole vault with AES-256 | `vj encrypt all` |
 | **`vj decrypt <id\|all>`** | Decrypt entry or whole vault to plaintext | `vj decrypt all` |
 | **`vj stats`** | Display streak, total entries, and storage footprint | `vj stats` |
