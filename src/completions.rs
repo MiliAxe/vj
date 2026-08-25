@@ -33,7 +33,7 @@ set -l commands record import inbox-server preview-inbox play preview list rando
 complete -c vj -f
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a record -d "Record a new video entry"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a play -d "Play entry in mpv (RAM streaming for encrypted)"
-complete -c vj -n "not __fish_seen_subcommand_from $commands" -a preview -d "Preview entry metadata and notes"
+complete -c vj -n "not __fish_seen_subcommand_from $commands" -a preview -d "Preview entry metadata, note, and storyboard"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a import -d "Import videos from inbox or file paths"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a inbox-server -d "Start local mobile upload server with QR code"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a preview-inbox -d "Display format and details for an inbox video"
@@ -41,7 +41,7 @@ complete -c vj -n "not __fish_seen_subcommand_from $commands" -a list -d "List a
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a random -d "Play a random past entry"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a encrypt -d "Encrypt entry with GPG AES-256"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a decrypt -d "Decrypt entry to plaintext"
-complete -c vj -n "not __fish_seen_subcommand_from $commands" -a delete -d "Permanently delete an entry"
+complete -c vj -n "not __fish_seen_subcommand_from $commands" -a delete -d "Permanently delete entries"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a stats -d "Show summary stats and storage"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a profiles -d "List available compression profiles"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a fonts -d "List recommended retro fonts for OSD"
@@ -166,12 +166,12 @@ _vj() {
         'inbox-server:Start local mobile upload web server'
         'preview-inbox:Display details for an inbox video'
         'play:Play entry in mpv'
-        'preview:Display metadata and note for an entry'
+        'preview:Display metadata, note, and storyboard for an entry'
         'list:List all journal entries'
         'random:Play a random past entry'
         'encrypt:Encrypt entries with GPG AES-256'
         'decrypt:Decrypt entries to plaintext'
-        'delete:Permanently delete an entry'
+        'delete:Permanently delete entries'
         'stats:Display storage and recording summary'
         'profiles:List available compression profiles'
         'fonts:List recommended retro fonts for OSD'

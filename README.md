@@ -16,13 +16,14 @@ This project is inspired by the King himself, [Terry A. Davis](https://en.wikipe
 ## Highlights & Features
 
 - **⚡ Blazing Fast Rust Core**: Instant sub-millisecond CLI startup, zero Python dependency, zero interpreter overhead.
+- **🖼️ In-Terminal Storyboard & Interactive MPV Peek**: Fast in-terminal 2x2 storyboard previews in `fzf` via `chafa`, plus instant floating video peek (<kbd>Ctrl-P</kbd> / <kbd>Space</kbd> inside `fzf`).
 - **📼 Optional Retro VHS / Camcorder OSD Overlay**: Opt-in authentic on-screen timestamp and title stacked in the bottom-left corner with embedded retro fonts (`vt323`, `silkscreen`, `press_start_2p`, `share_tech_mono`).
 - **📼 Ultra-Compact SVT-AV1 + Opus**: Compress hours of speech video into negligible disk space (~15 MB per hour in `terry` mode).
 - **🔒 Zero-Disk-Leak RAM Streaming**: Encrypted videos pipe directly through RAM into `mpv` (`gpg -d | mpv -`) without writing plaintext to disk.
 - **🚀 Zero-Friction Recording**: Run `vj record` and close preview to save. Background encoding runs silently via low OS priority (`ionice`/`nice`).
 - **📅 Native Jalali (Solar Hijri) & Gregorian**: Seamless calendar timestamps calculated natively in Rust with zero lag.
 - **📱 Built-In Mobile Web Upload Server**: Native async HTTP server with embedded drag-and-drop web UI and in-terminal ANSI QR code (`vj inbox-server`).
-- **🔍 Vim-First `fzf` Browser**: Interactive browsing with live metadata & markdown thought note preview panes and dynamic tab completions.
+- **🔍 Vim-First `fzf` Browser**: Interactive browsing with live metadata, note, and storyboard contact sheet preview panes.
 - **🗑️ Batch Deletion & Interactive `fzf` Vault Management**: Multi-select deletion with live preview panes (`vj delete`) or batch deletion by IDs (`vj delete id1 id2 ...`).
 - **⚙️ Modern TOML Configuration**: Clean XDG-standard configuration at `~/.config/vj/config.toml`.
 - **🐚 Auto Shell Completions**: Native completions for Fish, Bash, Zsh, PowerShell, and Elvish via `clap_complete`.
@@ -47,6 +48,17 @@ To uninstall:
 ```bash
 make uninstall
 ```
+
+---
+
+## Storyboard Previews & Interactive Video Peek in `fzf`
+
+`vj` features an instant preview workflow inside `fzf` (`vj play` / `vj delete`):
+
+1. **In-Terminal 2x2 Storyboard**:
+   - In `vj play`, `vj delete`, or `vj preview <id>`, entries display a 4-frame contact sheet rendered directly inside the terminal cells using `chafa` (or `timg`/`viu`).
+2. **Interactive Floating Video Peek**:
+   - While browsing in `vj play` or `vj delete`, press <kbd>Ctrl-P</kbd> or <kbd>Space</kbd> to pop up a floating, borderless muted video loop in the corner of your screen. Press <kbd>q</kbd> or <kbd>Esc</kbd> to dismiss.
 
 ---
 
@@ -104,7 +116,7 @@ vj record -O --overlay-font silkscreen --overlay-style camcorder_white --font-si
 | **`vj inbox-server`** | Start local upload server with phone QR code | `vj inbox-server 8080` |
 | **`vj play`** | Interactive `fzf` browser with live metadata preview | `vj play` |
 | **`vj play <id>`** | Play specific entry directly in `mpv` | `vj play 1405-05-30_12-33-03` |
-| **`vj preview <id>`** | Print entry metadata and note preview to stdout | `vj preview 1405-05-30_12-33-03` |
+| **`vj preview <id>`** | Print metadata, note, and terminal storyboard | `vj preview 1405-05-30_12-33-03` |
 | **`vj preview-inbox <file>`** | Inspect format, resolution, codec, and duration | `vj preview-inbox ~/video.mp4` |
 | **`vj list`** | List entries in formatted table (`-q` for raw IDs) | `vj list -q` |
 | **`vj random`** | Jump into a random historical recording | `vj random` |

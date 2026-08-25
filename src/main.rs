@@ -159,12 +159,16 @@ async fn main() -> Result<()> {
                     let v_plain = e.dir.join("video.mkv");
                     let note_plain = e.dir.join("note.md");
                     let meta_plain = e.dir.join("meta.json");
+                    let thumb_plain = e.dir.join("thumb.jpg");
 
                     if v_plain.exists() {
                         println!("Encrypting {}...", e.id);
                         crypto::encrypt_file(&v_plain, &auth)?;
                         if note_plain.exists() {
                             let _ = crypto::encrypt_file(&note_plain, &auth);
+                        }
+                        if thumb_plain.exists() {
+                            let _ = crypto::encrypt_file(&thumb_plain, &auth);
                         }
                         if meta_plain.exists() {
                             if let Ok(content) = fs::read_to_string(&meta_plain) {
@@ -198,12 +202,16 @@ async fn main() -> Result<()> {
                     let v_gpg = e.dir.join("video.mkv.gpg");
                     let note_gpg = e.dir.join("note.md.gpg");
                     let meta_gpg = e.dir.join("meta.json.gpg");
+                    let thumb_gpg = e.dir.join("thumb.jpg.gpg");
 
                     if v_gpg.exists() {
                         println!("Decrypting {}...", e.id);
                         crypto::decrypt_file(&v_gpg, e.dir.join("video.mkv"), &auth)?;
                         if note_gpg.exists() {
                             let _ = crypto::decrypt_file(&note_gpg, e.dir.join("note.md"), &auth);
+                        }
+                        if thumb_gpg.exists() {
+                            let _ = crypto::decrypt_file(&thumb_gpg, e.dir.join("thumb.jpg"), &auth);
                         }
                         if meta_gpg.exists() {
                             let meta_plain = e.dir.join("meta.json");
@@ -369,6 +377,10 @@ async fn main() -> Result<()> {
                     &config,
                     false,
                 )?;
+            }
+
+            Commands::InternalPeek { entry_id } => {
+                engine::play::execute_peek(&entry_id, cli.verbose, &config)?;
             }
         }
     } else {

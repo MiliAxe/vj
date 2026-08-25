@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Meta {
@@ -299,7 +300,69 @@ pub fn print_preview(entry: &Entry, auth: &GpgAuth) -> Result<()> {
         println!("Status:       Compressing in background...");
     }
 
+    render_entry_thumbnail(entry, auth);
+
     Ok(())
+}
+
+fn render_entry_thumbnail(entry: &Entry, auth: &GpgAuth) {
+    let thumb_file = entry.dir.join("thumb.jpg");
+    let thumb_gpg = entry.dir.join("thumb.jpg.gpg");
+    let v_plain = entry.dir.join("video.mkv");
+
+    // 1. If plaintext thumb doesn't exist, try to generate it from video.mkv if present
+    if !thumb_file.exists() && !thumb_gpg.exists() && v_plain.exists() {
+        let _ = Command::new("ffmpeg")
+            .arg("-loglevel").arg("error")
+            .arg("-y")
+            .arg("-i").arg(&v_plain)
+            .arg("-vf").arg("thumbnail=20,scale=160:120,tile=2x2")
+            .arg("-frames:v").arg("1")
+            .arg(&thumb_file)
+            .status();
+    }
+
+    let mut temp_thumb_path: Option<PathBuf> = None;
+
+    let target_thumb: Option<PathBuf> = if thumb_file.exists() {
+        Some(thumb_file)
+    } else if thumb_gpg.exists() && auth.has_auth() {
+        let tmp = std::env::temp_dir().join(format!("vj_thumb_prev_{}.jpg", entry.id));
+        if crypto::decrypt_file(&thumb_gpg, &tmp, auth).is_ok() {
+            temp_thumb_path = Some(tmp.clone());
+            Some(tmp)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    if let Some(ref path) = target_thumb {
+        if let Ok(chafa) = which::which("chafa") {
+            println!("\n{}", "--- Storyboard Preview ---".dimmed());
+            let _ = Command::new(chafa)
+                .arg("--size=38x13")
+                .arg(path)
+                .status();
+        } else if let Ok(timg) = which::which("timg") {
+            println!("\n{}", "--- Storyboard Preview ---".dimmed());
+            let _ = Command::new(timg)
+                .arg("-g38x13")
+                .arg(path)
+                .status();
+        } else if let Ok(viu) = which::which("viu") {
+            println!("\n{}", "--- Storyboard Preview ---".dimmed());
+            let _ = Command::new(viu)
+                .arg("-w").arg("38")
+                .arg(path)
+                .status();
+        }
+    }
+
+    if let Some(tmp) = temp_thumb_path {
+        let _ = fs::remove_file(tmp);
+    }
 }
 
 pub fn print_stats(entries: &[Entry], entries_dir: &Path, inbox_dir: &Path, cal: CalendarSystem) {
@@ -361,14 +424,16 @@ pub fn execute_delete(
         if std::io::stdin().is_terminal() && which::which("fzf").is_ok() {
             let current_exe = std::env::current_exe()?;
             let preview_cmd = format!("{} preview {{1}}", current_exe.display());
+            let peek_cmd = format!("{} __peek {{1}}", current_exe.display());
 
             let mut fzf_cmd = std::process::Command::new("fzf");
             fzf_cmd
                 .arg("-m")
                 .arg("--prompt=vj delete (TAB to multi-select) > ")
-                .arg("--header=[TAB/Shift-TAB: Multi-select | Enter: Confirm selection | Esc: Cancel]")
+                .arg("--header=[TAB: Multi-select | Enter: Confirm | Ctrl-P / Space: Peek Video | Esc: Cancel]")
                 .arg(format!("--preview={}", preview_cmd))
                 .arg("--preview-window=right:55%:wrap")
+                .arg(format!("--bind=ctrl-p:execute-silent({}),space:execute-silent({})", peek_cmd, peek_cmd))
                 .arg("--bind=ctrl-j:down,ctrl-k:up,ctrl-d:page-down,ctrl-u:page-up,ctrl-y:preview-up,ctrl-e:preview-down")
                 .stdin(std::process::Stdio::piped())
                 .stdout(std::process::Stdio::piped());

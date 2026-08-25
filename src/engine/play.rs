@@ -19,13 +19,15 @@ pub fn execute_play(target: Option<String>, verbose: bool, config: &Config) -> R
         if std::io::stdin().is_terminal() && which::which("fzf").is_ok() {
             let current_exe = std::env::current_exe()?;
             let preview_cmd = format!("{} preview {{1}}", current_exe.display());
+            let peek_cmd = format!("{} __peek {{1}}", current_exe.display());
 
             let mut fzf_cmd = Command::new("fzf");
             fzf_cmd
                 .arg("--prompt=vj play > ")
-                .arg("--header=[j/k: Navigate | C-u/C-d: Scroll Preview | Enter: Play | Esc: Quit]")
+                .arg("--header=[Enter: Play | Ctrl-P / Space: Peek Video | C-u/C-d: Scroll | Esc: Quit]")
                 .arg(format!("--preview={}", preview_cmd))
                 .arg("--preview-window=right:55%:wrap")
+                .arg(format!("--bind=ctrl-p:execute-silent({}),space:execute-silent({})", peek_cmd, peek_cmd))
                 .arg("--bind=ctrl-j:down,ctrl-k:up,ctrl-d:page-down,ctrl-u:page-up,ctrl-y:preview-up,ctrl-e:preview-down")
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped());
@@ -146,6 +148,73 @@ pub fn execute_play(target: Option<String>, verbose: bool, config: &Config) -> R
         println!("Video file is still compressing in the background.");
     } else {
         bail!("Video file missing for entry {}", entry.id);
+    }
+
+    Ok(())
+}
+
+pub fn execute_peek(target: &str, verbose: bool, config: &Config) -> Result<()> {
+    let entries = load_entries(&config.entries_path(), &config.temp_path())?;
+    let entry = match find_entry(&entries, target) {
+        Some(e) => e,
+        None => return Ok(()),
+    };
+
+    if which::which("mpv").is_err() {
+        return Ok(());
+    }
+
+    let auth = GpgAuth::from_config(config);
+    let v_gpg = entry.dir.join("video.mkv.gpg");
+    let v_plain = entry.dir.join("video.mkv");
+
+    let mut mpv_args = vec![
+        format!("--title=vj peek - {}", entry.id),
+        "--no-audio".to_string(),
+        "--loop-file=inf".to_string(),
+        "--ontop".to_string(),
+        "--no-border".to_string(),
+        "--geometry=30%x30%-20-20".to_string(),
+        "--autofit=360x270".to_string(),
+        "--really-quiet".to_string(),
+    ];
+
+    if !verbose {
+        mpv_args.push("--msg-level=all=no".to_string());
+    }
+
+    if v_gpg.exists() {
+        let mut gpg_cmd = Command::new("gpg");
+        gpg_cmd.arg("--batch");
+        auth.apply_to_cmd(&mut gpg_cmd);
+        gpg_cmd.arg("--decrypt").arg(&v_gpg);
+        gpg_cmd.stdout(Stdio::piped()).stderr(Stdio::null());
+
+        if let Ok(mut gpg_child) = gpg_cmd.spawn() {
+            if let Some(gpg_out) = gpg_child.stdout.take() {
+                let mut mpv_cmd = Command::new("mpv");
+                for arg in &mpv_args {
+                    mpv_cmd.arg(arg);
+                }
+                mpv_cmd.arg("-");
+                mpv_cmd.stdin(Stdio::from(gpg_out));
+
+                if let Ok(mut mpv_child) = mpv_cmd.spawn() {
+                    let _ = mpv_child.wait();
+                    let _ = gpg_child.wait();
+                    return Ok(());
+                }
+            }
+            let _ = gpg_child.kill();
+        }
+    } else if v_plain.exists() {
+        let mut mpv_cmd = Command::new("mpv");
+        for arg in &mpv_args {
+            mpv_cmd.arg(arg);
+        }
+        mpv_cmd.arg(&v_plain);
+        let mut child = mpv_cmd.spawn().context("Failed to start mpv player")?;
+        let _ = child.wait();
     }
 
     Ok(())

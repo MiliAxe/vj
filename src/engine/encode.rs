@@ -120,10 +120,25 @@ pub fn run_encoding(
     let _ = fs::remove_file(temp_raw);
     let _ = fs::remove_file(&encode_log);
 
+    // Generate 2x2 storyboard thumbnail for instant terminal preview
+    let thumb_file = entry_dir.join("thumb.jpg");
+    let _ = Command::new("ffmpeg")
+        .arg("-loglevel").arg("error")
+        .arg("-y")
+        .arg("-i").arg(&final_out)
+        .arg("-vf").arg("thumbnail=20,scale=160:120,tile=2x2")
+        .arg("-frames:v").arg("1")
+        .arg(&thumb_file)
+        .status();
+
     if do_encrypt {
         let auth = GpgAuth::from_config(config);
         crypto::encrypt_file(&final_out, &auth)
             .context("Failed to encrypt final video output")?;
+
+        if thumb_file.exists() {
+            let _ = crypto::encrypt_file(&thumb_file, &auth);
+        }
 
         if note_file.exists() {
             let _ = crypto::encrypt_file(&note_file, &auth);

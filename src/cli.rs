@@ -63,7 +63,7 @@ pub enum Commands {
 
     #[command(
         name = "preview",
-        about = "Display metadata, size, status, and note for an entry"
+        about = "Display metadata, size, status, note, and storyboard for an entry"
     )]
     Preview {
         #[arg(help = "Entry timestamp/ID")]
@@ -178,6 +178,11 @@ pub enum Commands {
         overlay_font_size: Option<u32>,
         #[arg(long)]
         overlay_title: bool,
+    },
+
+    #[command(hide = true, name = "__peek")]
+    InternalPeek {
+        entry_id: String,
     },
 }
 
