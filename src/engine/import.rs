@@ -2,6 +2,7 @@ use crate::calendar::{self, CalendarSystem};
 use crate::config::Config;
 use crate::crypto::{self, GpgAuth};
 use crate::entry::Meta;
+use crate::overlay::{build_drawtext_filter, OverlayConfig, OverlayStyle};
 use crate::profile;
 use anyhow::{bail, Context, Result};
 use chrono::DateTime;
@@ -21,6 +22,11 @@ pub struct ImportOptions {
     pub interactive: bool,
     pub keep: bool,
     pub verbose: bool,
+    pub overlay: Option<bool>,
+    pub overlay_style: Option<String>,
+    pub overlay_font: Option<String>,
+    pub overlay_font_size: Option<u32>,
+    pub overlay_title: Option<bool>,
 }
 
 pub fn get_video_creation_timestamp(file: &Path, cal: CalendarSystem) -> String {
@@ -235,6 +241,29 @@ pub fn execute_import(opts: ImportOptions, config: &Config) -> Result<()> {
     let do_encrypt = opts.encrypt.unwrap_or(config.auto_encrypt);
     let auth = GpgAuth::from_config(config);
 
+    // Determine overlay configuration
+    let overlay_enabled = opts.overlay.unwrap_or(config.retro_overlay);
+    let overlay_style: OverlayStyle = opts
+        .overlay_style
+        .as_deref()
+        .unwrap_or(&config.overlay_style)
+        .parse()
+        .unwrap_or_default();
+    let overlay_font = opts
+        .overlay_font
+        .clone()
+        .unwrap_or_else(|| config.overlay_font.clone());
+    let overlay_font_size = opts.overlay_font_size.or(config.overlay_font_size);
+    let overlay_title = opts.overlay_title.unwrap_or(config.overlay_show_title);
+
+    let overlay_cfg = OverlayConfig {
+        enabled: overlay_enabled,
+        style: overlay_style,
+        font: overlay_font,
+        font_size: overlay_font_size,
+        show_title: overlay_title,
+    };
+
     println!(
         "Importing {} video file(s) [Profile: {}]...",
         files_to_import.len(),
@@ -323,7 +352,7 @@ pub fn execute_import(opts: ImportOptions, config: &Config) -> Result<()> {
         let meta = Meta {
             timestamp: timestamp.clone(),
             calendar: Some(cal_sys.to_string()),
-            title: title_val,
+            title: title_val.clone(),
             original_filename: Some(bname.clone()),
             imported: Some(true),
             profile: resolved_name.clone(),
@@ -355,10 +384,20 @@ pub fn execute_import(opts: ImportOptions, config: &Config) -> Result<()> {
 
         cmd.arg("-i").arg(raw_file);
 
+        // Build video filter graph with retro overlay
+        let mut vf_parts = Vec::new();
         if let Some(ref vf) = profile_spec.vfilter {
             if !vf.is_empty() && vf != "null" {
-                cmd.arg("-vf").arg(vf);
+                vf_parts.push(vf.clone());
             }
+        }
+
+        if let Some(drawtext) = build_drawtext_filter(&timestamp, Some(&title_val), &overlay_cfg, &profile_spec.resolution) {
+            vf_parts.push(drawtext);
+        }
+
+        if !vf_parts.is_empty() {
+            cmd.arg("-vf").arg(vf_parts.join(","));
         }
 
         cmd.arg("-c:v")

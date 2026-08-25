@@ -6,14 +6,11 @@ use std::path::PathBuf;
     name = "vj",
     about = "Minimal, Ultra-Compressed & Secure Video Journaling",
     version,
-    arg_required_else_help = false
+    arg_required_else_help = true
 )]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
-
-    /// Fallback / Direct target ID or path to play if passed directly
-    pub target: Option<String>,
 
     #[arg(short, long, global = true, help = "Show verbose ffmpeg / mpv logs")]
     pub verbose: bool,
@@ -144,6 +141,13 @@ pub enum Commands {
     Config,
 
     #[command(
+        name = "fonts",
+        aliases = ["font"],
+        about = "List recommended retro fonts for the OSD overlay"
+    )]
+    Fonts,
+
+    #[command(
         name = "completions",
         aliases = ["completion"],
         about = "Generate or install shell completion scripts"
@@ -164,6 +168,16 @@ pub enum Commands {
         profile: String,
         #[arg(long)]
         encrypt: bool,
+        #[arg(long)]
+        overlay: bool,
+        #[arg(long)]
+        overlay_style: Option<String>,
+        #[arg(long)]
+        overlay_font: Option<String>,
+        #[arg(long)]
+        overlay_font_size: Option<u32>,
+        #[arg(long)]
+        overlay_title: bool,
     },
 }
 
@@ -192,6 +206,27 @@ pub struct RecordArgs {
 
     #[arg(long, aliases = ["no-bg"], help = "Encode in foreground instead of background")]
     pub wait: bool,
+
+    #[arg(short = 'O', long, help = "Enable retro VHS/camcorder OSD date overlay")]
+    pub overlay: bool,
+
+    #[arg(long, help = "Disable retro OSD date overlay")]
+    pub no_overlay: bool,
+
+    #[arg(long, help = "Retro OSD style (vhs_yellow, camcorder_white, green, amber, cyan)")]
+    pub overlay_style: Option<String>,
+
+    #[arg(long, help = "Retro OSD font (vt323, silkscreen, press_start_2p, share_tech_mono, or font path/name)")]
+    pub overlay_font: Option<String>,
+
+    #[arg(long, aliases = ["font-size"], help = "Retro OSD font size (default: auto proportional)")]
+    pub overlay_font_size: Option<u32>,
+
+    #[arg(long, help = "Include entry title in retro OSD overlay")]
+    pub overlay_title: bool,
+
+    #[arg(long, help = "Do not include entry title in retro OSD overlay")]
+    pub no_overlay_title: bool,
 }
 
 #[derive(Args, Debug)]
@@ -222,6 +257,27 @@ pub struct ImportArgs {
 
     #[arg(long, help = "Keep raw file in inbox")]
     pub keep: bool,
+
+    #[arg(short = 'O', long, help = "Enable retro VHS/camcorder OSD date overlay")]
+    pub overlay: bool,
+
+    #[arg(long, help = "Disable retro OSD date overlay")]
+    pub no_overlay: bool,
+
+    #[arg(long, help = "Retro OSD style (vhs_yellow, camcorder_white, green, amber, cyan)")]
+    pub overlay_style: Option<String>,
+
+    #[arg(long, help = "Retro OSD font (vt323, silkscreen, press_start_2p, share_tech_mono, or font path/name)")]
+    pub overlay_font: Option<String>,
+
+    #[arg(long, aliases = ["font-size"], help = "Retro OSD font size (default: auto proportional)")]
+    pub overlay_font_size: Option<u32>,
+
+    #[arg(long, help = "Include entry title in retro OSD overlay")]
+    pub overlay_title: bool,
+
+    #[arg(long, help = "Do not include entry title in retro OSD overlay")]
+    pub no_overlay_title: bool,
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]

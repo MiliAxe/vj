@@ -5,6 +5,8 @@ mod config;
 mod crypto;
 mod engine;
 mod entry;
+mod fonts;
+mod overlay;
 mod profile;
 mod server;
 
@@ -14,6 +16,7 @@ use cli::{Cli, Commands, CompletionTarget};
 use config::{get_config_file, Config};
 use crypto::GpgAuth;
 use entry::{find_entry, load_entries};
+use overlay::{OverlayConfig, OverlayStyle};
 use std::fs;
 use std::process::Command;
 
@@ -33,6 +36,22 @@ async fn main() -> Result<()> {
                     None
                 };
 
+                let overlay_opt = if args.overlay {
+                    Some(true)
+                } else if args.no_overlay {
+                    Some(false)
+                } else {
+                    None
+                };
+
+                let overlay_title_opt = if args.overlay_title {
+                    Some(true)
+                } else if args.no_overlay_title {
+                    Some(false)
+                } else {
+                    None
+                };
+
                 let opts = engine::record::RecordOptions {
                     profile: args.profile,
                     encrypt: encrypt_opt,
@@ -42,6 +61,11 @@ async fn main() -> Result<()> {
                     interactive: args.interactive,
                     verbose: cli.verbose,
                     wait: args.wait,
+                    overlay: overlay_opt,
+                    overlay_style: args.overlay_style,
+                    overlay_font: args.overlay_font,
+                    overlay_font_size: args.overlay_font_size,
+                    overlay_title: overlay_title_opt,
                 };
                 engine::record::execute_record(opts, &config)?;
             }
@@ -50,6 +74,22 @@ async fn main() -> Result<()> {
                 let encrypt_opt = if args.encrypt {
                     Some(true)
                 } else if args.no_encrypt {
+                    Some(false)
+                } else {
+                    None
+                };
+
+                let overlay_opt = if args.overlay {
+                    Some(true)
+                } else if args.no_overlay {
+                    Some(false)
+                } else {
+                    None
+                };
+
+                let overlay_title_opt = if args.overlay_title {
+                    Some(true)
+                } else if args.no_overlay_title {
                     Some(false)
                 } else {
                     None
@@ -65,6 +105,11 @@ async fn main() -> Result<()> {
                     interactive: args.interactive,
                     keep: args.keep,
                     verbose: cli.verbose,
+                    overlay: overlay_opt,
+                    overlay_style: args.overlay_style,
+                    overlay_font: args.overlay_font,
+                    overlay_font_size: args.overlay_font_size,
+                    overlay_title: overlay_title_opt,
                 };
                 engine::import::execute_import(opts, &config)?;
             }
@@ -247,6 +292,10 @@ async fn main() -> Result<()> {
                 println!("\n(*) Default profile. Change with default_profile = \"...\" in {:?}", get_config_file());
             }
 
+            Commands::Fonts => {
+                fonts::print_recommended_fonts();
+            }
+
             Commands::Config => {
                 let config_file = get_config_file();
                 if !config_file.exists() {
@@ -274,20 +323,52 @@ async fn main() -> Result<()> {
                 entry_dir,
                 profile,
                 encrypt,
+                overlay,
+                overlay_style,
+                overlay_font,
+                overlay_font_size,
+                overlay_title,
             } => {
                 let (_, profile_spec) = profile::resolve_profile(&profile, &config.profiles);
+                let style: OverlayStyle = overlay_style
+                    .as_deref()
+                    .unwrap_or(&config.overlay_style)
+                    .parse()
+                    .unwrap_or_default();
+                let font = overlay_font
+                    .unwrap_or_else(|| config.overlay_font.clone());
+                let font_size = overlay_font_size.or(config.overlay_font_size);
+
+                let overlay_cfg = OverlayConfig {
+                    enabled: overlay,
+                    style,
+                    font,
+                    font_size,
+                    show_title: overlay_title,
+                };
+
+                let meta_file = entry_dir.join("meta.json");
+                let title_opt = if meta_file.exists() {
+                    fs::read_to_string(&meta_file)
+                        .ok()
+                        .and_then(|s| serde_json::from_str::<entry::Meta>(&s).ok())
+                        .map(|m| m.title)
+                } else {
+                    None
+                };
+
                 engine::encode::run_encoding(
                     &temp_raw,
                     &entry_dir,
                     &profile_spec,
                     encrypt,
+                    &overlay_cfg,
+                    title_opt.as_deref(),
                     &config,
                     false,
                 )?;
             }
         }
-    } else if let Some(target) = cli.target {
-        engine::play::execute_play(Some(target), cli.verbose, &config)?;
     } else {
         let mut cmd = Cli::command();
         cmd.print_help()?;

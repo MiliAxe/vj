@@ -16,12 +16,13 @@ This project is inspired by the King himself, [Terry A. Davis](https://en.wikipe
 ## Highlights & Features
 
 - **⚡ Blazing Fast Rust Core**: Instant sub-millisecond CLI startup, zero Python dependency, zero interpreter overhead.
+- **📼 Optional Retro VHS / Camcorder OSD Overlay**: Opt-in authentic on-screen timestamp and title stacked in the bottom-left corner with embedded retro fonts (`vt323`, `silkscreen`, `press_start_2p`, `share_tech_mono`).
 - **📼 Ultra-Compact SVT-AV1 + Opus**: Compress hours of speech video into negligible disk space (~15 MB per hour in `terry` mode).
 - **🔒 Zero-Disk-Leak RAM Streaming**: Encrypted videos pipe directly through RAM into `mpv` (`gpg -d | mpv -`) without writing plaintext to disk.
 - **🚀 Zero-Friction Recording**: Run `vj record` and close preview to save. Background encoding runs silently via low OS priority (`ionice`/`nice`).
 - **📅 Native Jalali (Solar Hijri) & Gregorian**: Seamless calendar timestamps calculated natively in Rust with zero lag.
 - **📱 Built-In Mobile Web Upload Server**: Native async HTTP server with embedded drag-and-drop web UI and in-terminal ANSI QR code (`vj inbox-server`).
-- **🔍 Vim-First `fzf` Browser**: Interactive browsing with live metadata & markdown thought note preview panes.
+- **🔍 Vim-First `fzf` Browser**: Interactive browsing with live metadata & markdown thought note preview panes and dynamic tab completions.
 - **🗑️ Entry Deletion & Vault Management**: Manage, encrypt, decrypt, or permanently delete entries (`vj delete <id>`).
 - **⚙️ Modern TOML Configuration**: Clean XDG-standard configuration at `~/.config/vj/config.toml`.
 - **🐚 Auto Shell Completions**: Native completions for Fish, Bash, Zsh, PowerShell, and Elvish via `clap_complete`.
@@ -49,12 +50,55 @@ make uninstall
 
 ---
 
+## Retro Fonts & OSD Overlay *(Disabled by Default)*
+
+All overlay features are completely **disabled by default**. When you want the retro camcorder aesthetic, pass `-O` / `--overlay` or enable `retro_overlay = true` in `config.toml`.
+
+| Font Identifier | Style / Era | Description |
+| :--- | :--- | :--- |
+| **`vt323`** *(default)* | DEC VT323 CRT / VHS | Iconic tall retro VHS & CRT phosphor terminal font |
+| **`silkscreen`** | 90s Handheld Camcorder | Ultra-crisp pixel matrix font, ideal for compact/potato |
+| **`press_start_2p`** | 8-Bit Arcade / Micro | Classic 1980s retro gaming & computer pixel typography |
+| **`share_tech_mono`** | Cyberpunk HUD / Sci-Fi | Modern vintage high-tech monospace HUD display font |
+
+View all recommended fonts and styles:
+```bash
+vj fonts
+```
+
+### Overlay Layout:
+- **Bottom-Left Corner (Stacked)**:
+  - Top Line: Custom entry title (e.g. `Trip to Japan`)
+  - Bottom Line: Date and time timestamp (e.g. `1405-05-30  18:12:05`)
+
+### Recording with Retro Overlay:
+
+```bash
+# Clean recording (no overlay by default)
+vj record
+
+# Opt-in to retro OSD overlay
+vj record -O
+
+# Record with custom title (stacked right above timestamp in bottom-left)
+vj record -O -t "Trip to Japan"
+
+# Record with custom font size (e.g. 28px)
+vj record -O --font-size 28
+
+# Record with 90s camcorder pixel font & white styling
+vj record -O --overlay-font silkscreen --overlay-style camcorder_white --font-size 18
+```
+
+---
+
 ## Command Reference
 
 | Command | Description | Example |
 | :--- | :--- | :--- |
 | **`vj record`** | Start live webcam capture & preview | `vj record -p terry` |
 | **`vj record -t "..."`** | Record with title, tags, or notes | `vj record -t "Life Update" --tags "dev,log" -n` |
+| **`vj record -O`** | Record with retro OSD date/time overlay | `vj record -O --overlay-font silkscreen --font-size 20` |
 | **`vj import`** | Multi-select import from inbox with video preview pane | `vj import` |
 | **`vj import [files...]`** | Import specific videos with metadata conversion | `vj import ~/Downloads/vid.mp4 -t "Trip"` |
 | **`vj inbox-server`** | Start local upload server with phone QR code | `vj inbox-server 8080` |
@@ -69,6 +113,7 @@ make uninstall
 | **`vj decrypt <id\|all>`** | Decrypt entry or whole vault to plaintext | `vj decrypt all` |
 | **`vj stats`** | Display streak, total entries, and storage footprint | `vj stats` |
 | **`vj profiles`** | List available built-in & custom compression profiles | `vj profiles` |
+| **`vj fonts`** | List recommended retro fonts and styles | `vj fonts` |
 | **`vj config`** | Open configuration in `$EDITOR` (`nvim`/`vim`) | `vj config` |
 | **`vj completions`** | Output or auto-install shell completions | `vj completions install` |
 
@@ -100,6 +145,13 @@ date_calendar = "jalali"
 
 # Default compression profile ("terry", "potato", "compact", "balanced", "hq")
 default_profile = "terry"
+
+# Retro OSD Overlay Settings (disabled by default)
+retro_overlay = false                  # Overlays are completely OFF by default
+overlay_font = "vt323"                 # "vt323", "silkscreen", "press_start_2p", "share_tech_mono", or font path
+# overlay_font_size = 24               # Custom font size in pixels (default: auto proportional to resolution)
+overlay_style = "vhs_yellow"           # "vhs_yellow", "camcorder_white", "green", "amber", "cyan"
+overlay_show_title = true              # When overlay is enabled, show custom title stacked above date
 
 # Hardware capture devices
 camera_dev = "/dev/video0"

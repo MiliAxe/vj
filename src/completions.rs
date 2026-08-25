@@ -28,7 +28,7 @@ impl Write for SafeStdout {
 pub fn get_fish_completion() -> &'static str {
     r#"# Fish completion for vj
 
-set -l commands record import inbox-server preview-inbox play preview list random encrypt decrypt delete stats profiles config completions help
+set -l commands record import inbox-server preview-inbox play preview list random encrypt decrypt delete stats profiles fonts config completions help
 
 complete -c vj -f
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a record -d "Record a new video entry"
@@ -44,6 +44,7 @@ complete -c vj -n "not __fish_seen_subcommand_from $commands" -a decrypt -d "Dec
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a delete -d "Permanently delete an entry"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a stats -d "Show summary stats and storage"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a profiles -d "List available compression profiles"
+complete -c vj -n "not __fish_seen_subcommand_from $commands" -a fonts -d "List recommended retro fonts for OSD"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a config -d "Edit configuration file"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a completions -d "Output or install shell completions"
 
@@ -51,9 +52,6 @@ complete -c vj -n "not __fish_seen_subcommand_from $commands" -a completions -d 
 function __fish_vj_entries
     vj list -q 2>/dev/null
 end
-
-# Fallback top-level completion for direct entry playback
-complete -c vj -n "not __fish_seen_subcommand_from $commands" -a "(__fish_vj_entries)" -d "Direct entry ID"
 
 # Record & Import options
 complete -c vj -n "__fish_seen_subcommand_from record import" -s p -l profile -x -a "potato compact terry balanced hq" -d "Compression profile"
@@ -64,6 +62,13 @@ complete -c vj -n "__fish_seen_subcommand_from record import" -l tags -r -d "Com
 complete -c vj -n "__fish_seen_subcommand_from record import" -s n -l note -d "Open editor for notes"
 complete -c vj -n "__fish_seen_subcommand_from record import" -s i -l interactive -d "Prompt for title and note"
 complete -c vj -n "__fish_seen_subcommand_from record" -l wait -l no-bg -d "Encode in foreground"
+complete -c vj -n "__fish_seen_subcommand_from record import" -s O -l overlay -d "Enable retro OSD overlay"
+complete -c vj -n "__fish_seen_subcommand_from record import" -l no-overlay -d "Disable retro OSD overlay"
+complete -c vj -n "__fish_seen_subcommand_from record import" -l overlay-style -x -a "vhs_yellow camcorder_white green amber cyan" -d "Retro OSD color style"
+complete -c vj -n "__fish_seen_subcommand_from record import" -l overlay-font -x -a "vt323 silkscreen press_start_2p share_tech_mono" -d "Retro OSD font"
+complete -c vj -n "__fish_seen_subcommand_from record import" -l font-size -l overlay-font-size -d "Retro OSD font size in pixels"
+complete -c vj -n "__fish_seen_subcommand_from record import" -l overlay-title -d "Show title in overlay"
+complete -c vj -n "__fish_seen_subcommand_from record import" -l no-overlay-title -d "Do not show title in overlay"
 complete -c vj -n "__fish_seen_subcommand_from record import" -s v -l verbose -d "Verbose output"
 complete -c vj -n "__fish_seen_subcommand_from import" -l keep -d "Keep original file in inbox"
 
@@ -80,13 +85,13 @@ pub fn get_bash_completion() -> &'static str {
     local cur prev words cword
     _init_completion || return
 
-    local commands="record play preview list random encrypt decrypt delete stats profiles config import inbox-server preview-inbox completions help"
+    local commands="record play preview list random encrypt decrypt delete stats profiles fonts config import inbox-server preview-inbox completions help"
     local profiles="potato compact terry balanced hq"
+    local styles="vhs_yellow camcorder_white green amber cyan"
+    local fonts="vt323 silkscreen press_start_2p share_tech_mono"
 
     if [[ $cword -eq 1 ]]; then
-        local entries
-        entries=$(vj list -q 2>/dev/null)
-        COMPREPLY=( $(compgen -W "${commands} ${entries}" -- "${cur}") )
+        COMPREPLY=( $(compgen -W "${commands}" -- "${cur}") )
         return 0
     fi
 
@@ -94,15 +99,23 @@ pub fn get_bash_completion() -> &'static str {
         record)
             if [[ "${prev}" == "-p" || "${prev}" == "--profile" ]]; then
                 COMPREPLY=( $(compgen -W "${profiles}" -- "${cur}") )
+            elif [[ "${prev}" == "--overlay-style" ]]; then
+                COMPREPLY=( $(compgen -W "${styles}" -- "${cur}") )
+            elif [[ "${prev}" == "--overlay-font" ]]; then
+                COMPREPLY=( $(compgen -W "${fonts}" -- "${cur}") )
             else
-                COMPREPLY=( $(compgen -W "-p --profile -e --encrypt --no-encrypt -t --title --tags -n --note -i --interactive --wait --no-bg -v --verbose ${profiles}" -- "${cur}") )
+                COMPREPLY=( $(compgen -W "-p --profile -e --encrypt --no-encrypt -t --title --tags -n --note -i --interactive --wait --no-bg -O --overlay --no-overlay --overlay-style --overlay-font --font-size --overlay-font-size --overlay-title --no-overlay-title -v --verbose ${profiles}" -- "${cur}") )
             fi
             ;;
         import)
             if [[ "${prev}" == "-p" || "${prev}" == "--profile" ]]; then
                 COMPREPLY=( $(compgen -W "${profiles}" -- "${cur}") )
+            elif [[ "${prev}" == "--overlay-style" ]]; then
+                COMPREPLY=( $(compgen -W "${styles}" -- "${cur}") )
+            elif [[ "${prev}" == "--overlay-font" ]]; then
+                COMPREPLY=( $(compgen -W "${fonts}" -- "${cur}") )
             else
-                COMPREPLY=( $(compgen -W "-p --profile -e --encrypt --no-encrypt -t --title --tags -n --note -i --interactive --keep -v --verbose ${profiles}" -- "${cur}") )
+                COMPREPLY=( $(compgen -W "-p --profile -e --encrypt --no-encrypt -t --title --tags -n --note -i --interactive --keep -O --overlay --no-overlay --overlay-style --overlay-font --font-size --overlay-font-size --overlay-title --no-overlay-title -v --verbose ${profiles}" -- "${cur}") )
             fi
             ;;
         play|preview)
@@ -161,6 +174,7 @@ _vj() {
         'delete:Permanently delete an entry'
         'stats:Display storage and recording summary'
         'profiles:List available compression profiles'
+        'fonts:List recommended retro fonts for OSD'
         'config:Open configuration file in editor'
         'completions:Generate or install shell completion scripts'
     )
@@ -172,7 +186,6 @@ _vj() {
     case $state in
         command)
             _describe -t commands 'vj command' commands
-            _vj_entries
             ;;
         args)
             case $words[1] in
@@ -187,6 +200,14 @@ _vj() {
                         '(-i --interactive)'{-i,--interactive}'[Prompt for title and note]' \
                         '--wait[Encode in foreground]' \
                         '--no-bg[Encode in foreground]' \
+                        '(-O --overlay)'{-O,--overlay}'[Enable retro OSD overlay]' \
+                        '--no-overlay[Disable retro OSD overlay]' \
+                        '--overlay-style[Retro OSD color style]:style:(vhs_yellow camcorder_white green amber cyan)' \
+                        '--overlay-font[Retro OSD font]:font:(vt323 silkscreen press_start_2p share_tech_mono)' \
+                        '--font-size[Retro OSD font size in pixels]:fontsize:' \
+                        '--overlay-font-size[Retro OSD font size in pixels]:fontsize:' \
+                        '--overlay-title[Show title in overlay]' \
+                        '--no-overlay-title[Do not show title in overlay]' \
                         '(-v --verbose)'{-v,--verbose}'[Verbose output]'
                     ;;
                 import)
@@ -199,6 +220,14 @@ _vj() {
                         '(-n --note)'{-n,--note}'[Open editor for note]' \
                         '(-i --interactive)'{-i,--interactive}'[Prompt for title and note]' \
                         '--keep[Keep raw file in inbox]' \
+                        '(-O --overlay)'{-O,--overlay}'[Enable retro OSD overlay]' \
+                        '--no-overlay[Disable retro OSD overlay]' \
+                        '--overlay-style[Retro OSD color style]:style:(vhs_yellow camcorder_white green amber cyan)' \
+                        '--overlay-font[Retro OSD font]:font:(vt323 silkscreen press_start_2p share_tech_mono)' \
+                        '--font-size[Retro OSD font size in pixels]:fontsize:' \
+                        '--overlay-font-size[Retro OSD font size in pixels]:fontsize:' \
+                        '--overlay-title[Show title in overlay]' \
+                        '--no-overlay-title[Do not show title in overlay]' \
                         '(-v --verbose)'{-v,--verbose}'[Verbose output]' \
                         '*:file:_files'
                     ;;

@@ -38,6 +38,20 @@ pub struct Config {
     #[serde(default)]
     pub auto_encrypt: bool,
 
+    #[serde(default)]
+    pub retro_overlay: bool,
+
+    #[serde(default = "default_overlay_style")]
+    pub overlay_style: String,
+
+    #[serde(default = "default_overlay_font")]
+    pub overlay_font: String,
+
+    pub overlay_font_size: Option<u32>,
+
+    #[serde(default = "default_true")]
+    pub overlay_show_title: bool,
+
     pub key_file: Option<String>,
 
     pub passphrase: Option<String>,
@@ -46,6 +60,18 @@ pub struct Config {
 
     #[serde(default)]
     pub profiles: HashMap<String, Profile>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_overlay_style() -> String {
+    "vhs_yellow".to_string()
+}
+
+fn default_overlay_font() -> String {
+    "vt323".to_string()
 }
 
 fn default_entries_dir() -> String {
@@ -101,6 +127,11 @@ impl Default for Config {
             editor: default_editor(),
             inbox_port: default_inbox_port(),
             auto_encrypt: false,
+            retro_overlay: false,
+            overlay_style: default_overlay_style(),
+            overlay_font: default_overlay_font(),
+            overlay_font_size: None,
+            overlay_show_title: true,
             key_file: None,
             passphrase: None,
             extra_ffmpeg_flags: None,

@@ -2,6 +2,7 @@ use crate::calendar;
 use crate::config::Config;
 use crate::engine::encode::{run_encoding, spawn_detached_encoder};
 use crate::entry::Meta;
+use crate::overlay::{OverlayConfig, OverlayStyle};
 use crate::profile;
 use anyhow::{bail, Context, Result};
 use dialoguer::{Confirm, Input};
@@ -18,6 +19,11 @@ pub struct RecordOptions {
     pub interactive: bool,
     pub verbose: bool,
     pub wait: bool,
+    pub overlay: Option<bool>,
+    pub overlay_style: Option<String>,
+    pub overlay_font: Option<String>,
+    pub overlay_font_size: Option<u32>,
+    pub overlay_title: Option<bool>,
 }
 
 pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
@@ -214,7 +220,7 @@ pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
     let meta = Meta {
         timestamp: timestamp.clone(),
         calendar: Some(cal_sys.to_string()),
-        title: final_title,
+        title: final_title.clone(),
         original_filename: None,
         imported: Some(false),
         profile: resolved_name.clone(),
@@ -227,6 +233,29 @@ pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
     let meta_json = serde_json::to_string_pretty(&meta).context("Failed to serialize meta.json")?;
     fs::write(&meta_file, meta_json).context("Failed to write meta.json")?;
 
+    // Determine overlay settings
+    let overlay_enabled = opts.overlay.unwrap_or(config.retro_overlay);
+    let overlay_style: OverlayStyle = opts
+        .overlay_style
+        .as_deref()
+        .unwrap_or(&config.overlay_style)
+        .parse()
+        .unwrap_or_default();
+    let overlay_font = opts
+        .overlay_font
+        .clone()
+        .unwrap_or_else(|| config.overlay_font.clone());
+    let overlay_font_size = opts.overlay_font_size.or(config.overlay_font_size);
+    let overlay_title = opts.overlay_title.unwrap_or(config.overlay_show_title);
+
+    let overlay_cfg = OverlayConfig {
+        enabled: overlay_enabled,
+        style: overlay_style,
+        font: overlay_font,
+        font_size: overlay_font_size,
+        show_title: overlay_title,
+    };
+
     // Step 3: Compression + Encryption
     if opts.wait {
         println!("Encoding in foreground...");
@@ -235,12 +264,20 @@ pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
             &entry_folder,
             &profile_spec,
             do_encrypt,
+            &overlay_cfg,
+            Some(&final_title),
             config,
             opts.verbose,
         )?;
         println!("[✓] Entry saved and encoded to {}", entry_folder.display());
     } else {
-        match spawn_detached_encoder(&temp_raw, &entry_folder, &resolved_name, do_encrypt) {
+        match spawn_detached_encoder(
+            &temp_raw,
+            &entry_folder,
+            &resolved_name,
+            do_encrypt,
+            &overlay_cfg,
+        ) {
             Ok(pid) => {
                 println!(
                     "Encoding in background (PID: {}). Entry saved to {}",
@@ -255,6 +292,8 @@ pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
                     &entry_folder,
                     &profile_spec,
                     do_encrypt,
+                    &overlay_cfg,
+                    Some(&final_title),
                     config,
                     opts.verbose,
                 )?;

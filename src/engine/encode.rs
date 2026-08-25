@@ -1,6 +1,7 @@
 use crate::config::Config;
 use crate::crypto::{self, GpgAuth};
 use crate::entry::Meta;
+use crate::overlay::{build_drawtext_filter, OverlayConfig};
 use crate::profile::Profile;
 use anyhow::{bail, Context, Result};
 use notify_rust::Notification;
@@ -13,6 +14,8 @@ pub fn run_encoding(
     entry_dir: &Path,
     profile: &Profile,
     do_encrypt: bool,
+    overlay_cfg: &OverlayConfig,
+    title_opt: Option<&str>,
     config: &Config,
     verbose: bool,
 ) -> Result<()> {
@@ -42,10 +45,20 @@ pub fn run_encoding(
 
     cmd.arg("-i").arg(temp_raw);
 
+    // Build video filter graph including retro overlay if enabled
+    let mut vf_parts = Vec::new();
     if let Some(ref vf) = profile.vfilter {
         if !vf.is_empty() && vf != "null" {
-            cmd.arg("-vf").arg(vf);
+            vf_parts.push(vf.clone());
         }
+    }
+
+    if let Some(drawtext) = build_drawtext_filter(&timestamp, title_opt, overlay_cfg, &profile.resolution) {
+        vf_parts.push(drawtext);
+    }
+
+    if !vf_parts.is_empty() {
+        cmd.arg("-vf").arg(vf_parts.join(","));
     }
 
     cmd.arg("-c:v")
@@ -142,6 +155,7 @@ pub fn spawn_detached_encoder(
     entry_dir: &Path,
     profile_name: &str,
     do_encrypt: bool,
+    overlay_cfg: &OverlayConfig,
 ) -> Result<u32> {
     let current_exe = std::env::current_exe().context("Failed to get current executable path")?;
     let mut cmd = Command::new(current_exe);
@@ -152,6 +166,19 @@ pub fn spawn_detached_encoder(
 
     if do_encrypt {
         cmd.arg("--encrypt");
+    }
+
+    if overlay_cfg.enabled {
+        cmd.arg("--overlay");
+        cmd.arg("--overlay-style")
+            .arg(format!("{:?}", overlay_cfg.style).to_lowercase());
+        cmd.arg("--overlay-font").arg(&overlay_cfg.font);
+        if let Some(size) = overlay_cfg.font_size {
+            cmd.arg("--overlay-font-size").arg(size.to_string());
+        }
+        if overlay_cfg.show_title {
+            cmd.arg("--overlay-title");
+        }
     }
 
     cmd.stdin(Stdio::null())
