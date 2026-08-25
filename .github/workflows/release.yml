@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag to release against (e.g. v0.1.0)'
+        required: false
+        default: 'v0.1.0'
 
 permissions:
   contents: write
@@ -34,24 +40,22 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross
+      - name: Setup cross-compilation toolchain
         if: matrix.use_cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
+        uses: taiki-e/setup-cross-toolchain-action@v1
+        with:
+          target: ${{ matrix.target }}
 
       - name: Build release binary
-        run: |
-          if [ "${{ matrix.use_cross }}" = "true" ]; then
-            cross build --release --target ${{ matrix.target }}
-          else
-            cargo build --release --target ${{ matrix.target }}
-          fi
+        run: cargo build --release --target ${{ matrix.target }}
 
       - name: Package Release Tarball
         run: |
           mkdir -p package_dir
           cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} package_dir/
-          cp README.md LICENSE package_dir/
-          cp -r assets package_dir/
+          [ -f README.md ] && cp README.md package_dir/
+          [ -f LICENSE ] && cp LICENSE package_dir/
+          [ -d assets ] && cp -r assets package_dir/
           cd package_dir
           tar -czvf ../${{ matrix.asset_name }}.tar.gz *
           cd ..
@@ -59,6 +63,7 @@ jobs:
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
           files: ${{ matrix.asset_name }}.tar.gz
           generate_release_notes: true
         env:
