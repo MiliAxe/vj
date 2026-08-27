@@ -78,6 +78,8 @@ complete -c vj -n "__fish_seen_subcommand_from import" -l keep -d "Keep original
 complete -c vj -n "__fish_seen_subcommand_from play preview delete" -a "(__fish_vj_entries)" -d "Entry ID"
 complete -c vj -n "__fish_seen_subcommand_from delete" -s f -l force -d "Skip confirmation"
 complete -c vj -n "__fish_seen_subcommand_from encrypt decrypt" -a "all (__fish_vj_entries)" -d "Entry ID or 'all'"
+complete -c vj -n "__fish_seen_subcommand_from stats" -s m -l months -x -a "3 6 12" -d "Number of months to display in heatmap"
+complete -c vj -n "__fish_seen_subcommand_from stats" -s y -l year -d "Display 12 months (1 year) in heatmap"
 complete -c vj -n "__fish_seen_subcommand_from completions" -a "fish bash zsh powershell elvish install" -d "Shell type or install"
 "#
 }
@@ -139,6 +141,9 @@ pub fn get_bash_completion() -> &'static str {
             entries="all $(vj list -q 2>/dev/null)"
             COMPREPLY=( $(compgen -W "${entries}" -- "${cur}") )
             ;;
+        stats|stat|s)
+            COMPREPLY=( $(compgen -W "-m --months -y --year" -- "${cur}") )
+            ;;
         completions)
             COMPREPLY=( $(compgen -W "bash zsh fish powershell elvish install" -- "${cur}") )
             ;;
@@ -174,7 +179,7 @@ _vj() {
         'encrypt:Encrypt entries with GPG AES-256'
         'decrypt:Decrypt entries to plaintext'
         'delete:Permanently delete entries'
-        'stats:Display storage and recording summary'
+        'stats:Display storage, streaks, and contribution heatmap'
         'profiles:List available compression profiles'
         'fonts:List recommended retro fonts for OSD'
         'config:Open configuration file in editor'
@@ -246,6 +251,11 @@ _vj() {
                     _arguments \
                         '(-f --force)'{-f,--force}'[Skip confirmation]' \
                         '*:entry:_vj_entries'
+                    ;;
+                stats)
+                    _arguments \
+                        '(-m --months)'{-m,--months}'[Number of months in heatmap]:months:(3 6 12)' \
+                        '(-y --year)'{-y,--year}'[Display full 12 months (1 year)]'
                     ;;
                 encrypt|decrypt)
                     _arguments \

@@ -126,7 +126,9 @@ vj record -O --overlay-font silkscreen --overlay-style camcorder_white --font-si
 | **`vj delete -f [ids...]`** | Delete entries without confirmation prompt | `vj delete -f 1405-05-30_12-33-03` |
 | **`vj encrypt <id\|all>`** | Encrypt entry or whole vault with AES-256 | `vj encrypt all` |
 | **`vj decrypt <id\|all>`** | Decrypt entry or whole vault to plaintext | `vj decrypt all` |
-| **`vj stats`** | Display streak, total entries, and storage footprint | `vj stats` |
+| **`vj stats`** | Display storage, streaks, and Retro CRT contribution heatmap | `vj stats` |
+| **`vj stats -m 6`** | Display past 6 months in contribution heatmap | `vj stats -m 6` |
+| **`vj stats -y`** | Display full 12 months (1 year) in contribution heatmap | `vj stats -y` |
 | **`vj profiles`** | List available built-in & custom compression profiles | `vj profiles` |
 | **`vj fonts`** | List recommended retro fonts and styles | `vj fonts` |
 | **`vj config`** | Open configuration in `$EDITOR` (`nvim`/`vim`) | `vj config` |
@@ -163,6 +165,9 @@ default_profile = "terry"
 
 # Audio Noise Suppression (afftdn)
 denoise = false                        # Set to true to automatically denoise all audio
+
+# Activity Heatmap Duration
+stats_months = 3                       # Default months to show in stats heatmap (3, 6, or 12)
 
 # Retro OSD Overlay Settings (disabled by default)
 retro_overlay = false                  # Overlays are completely OFF by default

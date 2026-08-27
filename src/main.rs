@@ -257,13 +257,19 @@ async fn main() -> Result<()> {
                 )?;
             }
 
-            Commands::Stats => {
+            Commands::Stats { months, year } => {
                 let entries = load_entries(&config.entries_path(), &config.temp_path())?;
+                let effective_months = if year {
+                    12
+                } else {
+                    months.unwrap_or(config.stats_months)
+                };
                 entry::print_stats(
                     &entries,
                     &config.entries_path(),
                     &config.inbox_path(),
                     config.calendar_system(),
+                    effective_months,
                 );
             }
 

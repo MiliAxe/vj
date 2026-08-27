@@ -55,6 +55,9 @@ pub struct Config {
     #[serde(default = "default_true")]
     pub overlay_show_title: bool,
 
+    #[serde(default = "default_stats_months")]
+    pub stats_months: u32,
+
     pub key_file: Option<String>,
 
     pub passphrase: Option<String>,
@@ -63,6 +66,10 @@ pub struct Config {
 
     #[serde(default)]
     pub profiles: HashMap<String, Profile>,
+}
+
+fn default_stats_months() -> u32 {
+    3
 }
 
 fn default_true() -> bool {
@@ -136,6 +143,7 @@ impl Default for Config {
             overlay_font: default_overlay_font(),
             overlay_font_size: None,
             overlay_show_title: true,
+            stats_months: 3,
             key_file: None,
             passphrase: None,
             extra_ffmpeg_flags: None,

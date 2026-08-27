@@ -63,6 +63,84 @@ pub fn gregorian_to_jalali(gy: i32, gm: u32, gd: u32) -> (i32, u32, u32) {
     (jy, jm, jd)
 }
 
+/// Convert Jalali (Solar Hijri) year, month, day to Gregorian year, month, day.
+pub fn jalali_to_gregorian(jy: i32, jm: u32, jd: u32) -> (i32, u32, u32) {
+    let j_days = if jm <= 6 {
+        ((jm - 1) * 31 + (jd - 1)) as i32
+    } else {
+        (186 + (jm - 7) * 30 + (jd - 1)) as i32
+    };
+
+    let jy_offset = jy + 1595;
+    let cycle33 = jy_offset / 33;
+    let rem33 = jy_offset % 33;
+    let cycle4 = rem33 / 4;
+    let rem4 = rem33 % 4;
+
+    let mut days = cycle33 * 12053 + cycle4 * 1461 + rem4 * 365 + j_days;
+    if rem4 > 0 {
+        days += 1;
+    }
+
+    let mut sal_g = days - 355666;
+    let mut gy = 400 * (sal_g / 146097);
+    sal_g %= 146097;
+
+    if sal_g > 36524 {
+        sal_g -= 1;
+        gy += 100 * (sal_g / 36524);
+        sal_g %= 36524;
+        if sal_g >= 365 {
+            sal_g += 1;
+        }
+    }
+
+    gy += 4 * (sal_g / 1461);
+    sal_g %= 1461;
+
+    if sal_g > 365 {
+        gy += (sal_g - 1) / 365;
+        sal_g = (sal_g - 1) % 365;
+    }
+
+    let g_days_in_month = [
+        31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+    ];
+
+    let mut gm = 0;
+    while gm < 12 && sal_g > g_days_in_month[gm] {
+        sal_g -= g_days_in_month[gm];
+        gm += 1;
+    }
+
+    (gy, (gm + 1) as u32, sal_g as u32)
+}
+
+/// Helper to parse an entry's ID or date string into a normalized Gregorian NaiveDate
+pub fn parse_entry_to_naive_date(id: &str, declared_cal: Option<&str>) -> Option<chrono::NaiveDate> {
+    let date_str = id.split('_').next()?;
+    let parts: Vec<&str> = date_str.split('-').collect();
+    if parts.len() < 3 {
+        return None;
+    }
+    let y: i32 = parts[0].parse().ok()?;
+    let m: u32 = parts[1].parse().ok()?;
+    let d: u32 = parts[2].parse().ok()?;
+
+    let is_jalali = if let Some(cal) = declared_cal {
+        cal.to_lowercase() == "jalali"
+    } else {
+        y < 1900 // Heuristic: Jalali years are ~1300-1500, Gregorian are ~1900-2100
+    };
+
+    if is_jalali {
+        let (gy, gm, gd) = jalali_to_gregorian(y, m, d);
+        chrono::NaiveDate::from_ymd_opt(gy, gm, gd)
+    } else {
+        chrono::NaiveDate::from_ymd_opt(y, m, d)
+    }
+}
+
 /// Generate timestamp according to calendar system and time
 pub fn format_timestamp(dt: &DateTime<Local>, cal: CalendarSystem) -> String {
     match cal {
@@ -119,5 +197,32 @@ mod tests {
         assert_eq!(jy, 1402);
         assert_eq!(jm, 12);
         assert_eq!(jd, 29);
+    }
+
+    #[test]
+    fn test_jalali_to_gregorian() {
+        let (gy, gm, gd) = jalali_to_gregorian(1405, 5, 31);
+        assert_eq!(gy, 2026);
+        assert_eq!(gm, 8);
+        assert_eq!(gd, 22);
+
+        let (gy, gm, gd) = jalali_to_gregorian(1403, 1, 1);
+        assert_eq!(gy, 2024);
+        assert_eq!(gm, 3);
+        assert_eq!(gd, 21);
+
+        let (gy, gm, gd) = jalali_to_gregorian(1402, 12, 29);
+        assert_eq!(gy, 2024);
+        assert_eq!(gm, 3);
+        assert_eq!(gd, 20);
+    }
+
+    #[test]
+    fn test_parse_entry_to_naive_date() {
+        let d1 = parse_entry_to_naive_date("1405-05-31_12-00-00", Some("jalali")).unwrap();
+        assert_eq!(d1, chrono::NaiveDate::from_ymd_opt(2026, 8, 22).unwrap());
+
+        let d2 = parse_entry_to_naive_date("2026-08-22_12-00-00", Some("gregorian")).unwrap();
+        assert_eq!(d2, chrono::NaiveDate::from_ymd_opt(2026, 8, 22).unwrap());
     }
 }

@@ -122,9 +122,15 @@ pub enum Commands {
     #[command(
         name = "stats",
         aliases = ["stat", "s"],
-        about = "Display storage and recording summary"
+        about = "Display storage, streaks, and activity contribution heatmap"
     )]
-    Stats,
+    Stats {
+        #[arg(short = 'm', long, help = "Number of months to display in activity heatmap (e.g. 3, 6, 12)")]
+        months: Option<u32>,
+
+        #[arg(short = 'y', long, help = "Display full 12 months (1 year) in activity heatmap")]
+        year: bool,
+    },
 
     #[command(
         name = "profiles",

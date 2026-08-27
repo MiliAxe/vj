@@ -1,9 +1,11 @@
-use crate::calendar::CalendarSystem;
+use crate::calendar::{self, CalendarSystem};
 use crate::crypto::{self, GpgAuth};
 use anyhow::{Context, Result};
+use chrono::{Datelike, Duration, Local, NaiveDate};
 use colored::*;
 use dialoguer::Confirm;
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
@@ -365,12 +367,20 @@ fn render_entry_thumbnail(entry: &Entry, auth: &GpgAuth) {
     }
 }
 
-pub fn print_stats(entries: &[Entry], entries_dir: &Path, inbox_dir: &Path, cal: CalendarSystem) {
+pub fn print_stats(
+    entries: &[Entry],
+    entries_dir: &Path,
+    inbox_dir: &Path,
+    cal: CalendarSystem,
+    months: u32,
+) {
     let total_entries = entries.len();
     let mut encrypted_count = 0;
     let mut raw_count = 0;
     let mut total_bytes: u64 = 0;
-    let mut days_recorded = std::collections::HashSet::new();
+
+    let mut date_counts: HashMap<NaiveDate, usize> = HashMap::new();
+    let mut all_dates_set: BTreeSet<NaiveDate> = BTreeSet::new();
 
     for e in entries {
         if e.is_encrypted {
@@ -380,8 +390,11 @@ pub fn print_stats(entries: &[Entry], entries_dir: &Path, inbox_dir: &Path, cal:
         }
         total_bytes += e.size_bytes;
 
-        let day = e.id.split('_').next().unwrap_or(&e.id);
-        days_recorded.insert(day.to_string());
+        let declared_cal = e.meta.as_ref().and_then(|m| m.calendar.as_deref());
+        if let Some(nd) = calendar::parse_entry_to_naive_date(&e.id, declared_cal) {
+            *date_counts.entry(nd).or_insert(0) += 1;
+            all_dates_set.insert(nd);
+        }
     }
 
     let disk_usage = if total_bytes >= 1024 * 1024 * 1024 {
@@ -394,6 +407,7 @@ pub fn print_stats(entries: &[Entry], entries_dir: &Path, inbox_dir: &Path, cal:
         format!("{} B", total_bytes)
     };
 
+    println!("================== JOURNAL STATS ==================");
     println!("Location:       {}", entries_dir.display());
     println!("Inbox:          {}", inbox_dir.display());
     println!("Calendar:       {}", cal);
@@ -401,7 +415,240 @@ pub fn print_stats(entries: &[Entry], entries_dir: &Path, inbox_dir: &Path, cal:
     println!("Plaintext:      {}", raw_count);
     println!("Encrypted:      {}", encrypted_count);
     println!("Storage:        {}", disk_usage);
-    println!("Recorded Days:  {}", days_recorded.len());
+    println!("Recorded Days:  {}", all_dates_set.len());
+
+    if entries.is_empty() {
+        return;
+    }
+
+    // 1. Calculate Streaks
+    let today = Local::now().date_naive();
+    let yesterday = today - Duration::days(1);
+
+    let mut current_streak = 0;
+    let mut streak_start_date = None;
+
+    let streak_anchor = if date_counts.contains_key(&today) {
+        Some(today)
+    } else if date_counts.contains_key(&yesterday) {
+        Some(yesterday)
+    } else {
+        None
+    };
+
+    if let Some(mut curr) = streak_anchor {
+        while date_counts.contains_key(&curr) {
+            current_streak += 1;
+            streak_start_date = Some(curr);
+            curr = curr - Duration::days(1);
+        }
+    }
+
+    let mut longest_streak = 0;
+    let mut temp_streak = 0;
+    let mut prev_date: Option<NaiveDate> = None;
+
+    for &d in &all_dates_set {
+        if let Some(prev) = prev_date {
+            if d == prev + Duration::days(1) {
+                temp_streak += 1;
+            } else {
+                temp_streak = 1;
+            }
+        } else {
+            temp_streak = 1;
+        }
+        if temp_streak > longest_streak {
+            longest_streak = temp_streak;
+        }
+        prev_date = Some(d);
+    }
+
+    let effective_months = months.max(1);
+    let total_days_window = (effective_months * 30) as i64;
+    let window_start = today - Duration::days(total_days_window - 1);
+    let active_in_window = all_dates_set.iter().filter(|&&d| d >= window_start && d <= today).count();
+    let active_pct = (active_in_window as f64 / total_days_window as f64 * 100.0).round() as u32;
+
+    println!("\nStreaks:");
+    if current_streak > 0 {
+        let start_str = if let Some(st) = streak_start_date {
+            format_date_for_display(st, cal)
+        } else {
+            "".to_string()
+        };
+        println!(
+            "  :: Current Streak: {} day{} ({} -> Today)",
+            current_streak,
+            if current_streak == 1 { "" } else { "s" },
+            start_str
+        );
+    } else {
+        println!("  :: Current Streak: 0 days");
+    }
+    println!(
+        "  :: Longest Streak: {} day{}",
+        longest_streak,
+        if longest_streak == 1 { "" } else { "s" }
+    );
+    println!(
+        "  :: Active Days:    {} / {} days ({}%)",
+        active_in_window, total_days_window, active_pct
+    );
+
+    // 2. Render Retro CRT Contribution Heatmap
+    render_contribution_heatmap(&date_counts, today, cal, effective_months);
+}
+
+fn format_date_for_display(d: NaiveDate, cal: CalendarSystem) -> String {
+    match cal {
+        CalendarSystem::Jalali => {
+            let (jy, jm, jd) = calendar::gregorian_to_jalali(d.year(), d.month(), d.day());
+            format!("{:04}-{:02}-{:02}", jy, jm, jd)
+        }
+        CalendarSystem::Gregorian => d.format("%Y-%m-%d").to_string(),
+    }
+}
+
+fn day_of_week_index(date: NaiveDate, cal: CalendarSystem) -> usize {
+    match cal {
+        CalendarSystem::Jalali => {
+            // Saturday is index 0
+            ((date.weekday().num_days_from_monday() + 2) % 7) as usize
+        }
+        CalendarSystem::Gregorian => {
+            // Monday is index 0
+            date.weekday().num_days_from_monday() as usize
+        }
+    }
+}
+
+fn month_abbrev(date: NaiveDate, cal: CalendarSystem) -> &'static str {
+    match cal {
+        CalendarSystem::Jalali => {
+            let (_, jm, _) = calendar::gregorian_to_jalali(date.year(), date.month(), date.day());
+            match jm {
+                1 => "Far",
+                2 => "Ord",
+                3 => "Kho",
+                4 => "Tir",
+                5 => "Mor",
+                6 => "Sha",
+                7 => "Meh",
+                8 => "Abn",
+                9 => "Aza",
+                10 => "Dey",
+                11 => "Bah",
+                12 => "Esf",
+                _ => "---",
+            }
+        }
+        CalendarSystem::Gregorian => match date.month() {
+            1 => "Jan",
+            2 => "Feb",
+            3 => "Mar",
+            4 => "Apr",
+            5 => "May",
+            6 => "Jun",
+            7 => "Jul",
+            8 => "Aug",
+            9 => "Sep",
+            10 => "Oct",
+            11 => "Nov",
+            12 => "Dec",
+            _ => "---",
+        },
+    }
+}
+
+fn month_key(date: NaiveDate, cal: CalendarSystem) -> (i32, u32) {
+    match cal {
+        CalendarSystem::Jalali => {
+            let (jy, jm, _) = calendar::gregorian_to_jalali(date.year(), date.month(), date.day());
+            (jy, jm)
+        }
+        CalendarSystem::Gregorian => (date.year(), date.month()),
+    }
+}
+
+fn render_contribution_heatmap(
+    date_counts: &HashMap<NaiveDate, usize>,
+    today: NaiveDate,
+    cal: CalendarSystem,
+    months: u32,
+) {
+    let day_labels: [&str; 7] = match cal {
+        CalendarSystem::Jalali => ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"],
+        CalendarSystem::Gregorian => ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    };
+
+    let total_weeks = if months == 12 {
+        52
+    } else {
+        (months * 4 + (months / 3).max(1)) as usize
+    };
+
+    let days_to_end_of_week = 6 - day_of_week_index(today, cal);
+    let grid_end_date = today + Duration::days(days_to_end_of_week as i64);
+    let total_days = (total_weeks * 7) as i64;
+    let grid_start_date = grid_end_date - Duration::days(total_days - 1);
+
+    println!(
+        "\nActivity (Past {} Month{}):",
+        months,
+        if months == 1 { "" } else { "s" }
+    );
+
+    // Month headers row
+    let mut header_chars: Vec<char> = vec![' '; 5 + total_weeks * 2 + 4];
+    let mut prev_month_key = None;
+
+    for w in 0..total_weeks {
+        let mid_week_date = grid_start_date + Duration::days((w * 7 + 3) as i64);
+        let m_key = month_key(mid_week_date, cal);
+        if prev_month_key != Some(m_key) {
+            let name = month_abbrev(mid_week_date, cal);
+            let pos = 5 + w * 2;
+            for (idx, ch) in name.chars().enumerate() {
+                if pos + idx < header_chars.len() {
+                    header_chars[pos + idx] = ch;
+                }
+            }
+            prev_month_key = Some(m_key);
+        }
+    }
+
+    let header_str: String = header_chars.into_iter().collect();
+    println!("{}", header_str.trim_end().dimmed());
+
+    // 7 rows for each day of the week
+    for r in 0..7 {
+        let mut row_str = format!("{:<4} ", day_labels[r]);
+        for w in 0..total_weeks {
+            let day_date = grid_start_date + Duration::days((w * 7 + r) as i64);
+            if day_date > today {
+                row_str.push_str("  ");
+            } else {
+                let count = date_counts.get(&day_date).copied().unwrap_or(0);
+                let cell = match count {
+                    0 => "░ ".dimmed().to_string(),
+                    1 => "▒ ".green().to_string(),
+                    2 => "▓ ".bright_green().to_string(),
+                    _ => "█ ".bold().bright_cyan().to_string(),
+                };
+                row_str.push_str(&cell);
+            }
+        }
+        println!("{}", row_str);
+    }
+
+    println!(
+        "\nLegend:  {} 0  {} 1  {} 2  {} 3+",
+        "░".dimmed(),
+        "▒".green(),
+        "▓".bright_green(),
+        "█".bold().bright_cyan()
+    );
 }
 
 
