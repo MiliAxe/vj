@@ -271,7 +271,7 @@ pub fn print_preview(entry: &Entry, auth: &GpgAuth) -> Result<()> {
             println!("\n--- Note Preview ---");
             if auth.has_auth() {
                 if let Ok(dec) = crypto::decrypt_to_string(&note_gpg, auth) {
-                    let lines: Vec<&str> = dec.lines().take(25).collect();
+                    let lines: Vec<&str> = dec.lines().take(15).collect();
                     println!("{}", lines.join("\n"));
                 } else {
                     println!("(Encrypted note)");
@@ -294,7 +294,7 @@ pub fn print_preview(entry: &Entry, auth: &GpgAuth) -> Result<()> {
         if note_plain.exists() {
             println!("\n--- Note Preview ---");
             if let Ok(txt) = fs::read_to_string(&note_plain) {
-                let lines: Vec<&str> = txt.lines().take(25).collect();
+                let lines: Vec<&str> = txt.lines().take(15).collect();
                 println!("{}", lines.join("\n"));
             }
         }
@@ -345,10 +345,13 @@ fn render_entry_thumbnail(entry: &Entry, auth: &GpgAuth) {
         print!("\x1b_Ga=d,d=A\x1b\\");
         let _ = std::io::stdout().flush();
 
+        let (preview_w, preview_h) = get_preview_dimensions();
+        let size_arg = format!("{}x{}", preview_w, preview_h);
+
         if let Ok(chafa) = which::which("chafa") {
             println!("\n{}", "--- Storyboard Preview ---".dimmed());
             let _ = Command::new(chafa)
-                .arg("--size=38x13")
+                .arg(format!("--size={}", size_arg))
                 .arg("--passthrough=none")
                 .arg("--animate=off")
                 .arg(path)
@@ -356,13 +359,14 @@ fn render_entry_thumbnail(entry: &Entry, auth: &GpgAuth) {
         } else if let Ok(timg) = which::which("timg") {
             println!("\n{}", "--- Storyboard Preview ---".dimmed());
             let _ = Command::new(timg)
-                .arg("-g38x13")
+                .arg(format!("-g{}", size_arg))
                 .arg(path)
                 .status();
         } else if let Ok(viu) = which::which("viu") {
             println!("\n{}", "--- Storyboard Preview ---".dimmed());
             let _ = Command::new(viu)
-                .arg("-w").arg("38")
+                .arg("-w").arg(preview_w.to_string())
+                .arg("-h").arg(preview_h.to_string())
                 .arg(path)
                 .status();
         }
@@ -371,6 +375,37 @@ fn render_entry_thumbnail(entry: &Entry, auth: &GpgAuth) {
     if let Some(tmp) = temp_thumb_path {
         let _ = fs::remove_file(tmp);
     }
+}
+
+fn get_preview_dimensions() -> (u16, u16) {
+    // 1. Check FZF preview environment variables
+    if let (Ok(cols_str), Ok(lines_str)) = (
+        std::env::var("FZF_PREVIEW_COLUMNS"),
+        std::env::var("FZF_PREVIEW_LINES"),
+    ) {
+        if let (Ok(cols), Ok(lines)) = (cols_str.parse::<u16>(), lines_str.parse::<u16>()) {
+            // Reserve ~20 lines for metadata JSON dump & headers
+            let max_h = lines.saturating_sub(22).min(lines * 45 / 100).max(6);
+            let ideal_w = (max_h as u32 * 26 / 10) as u16;
+            let max_w = cols.saturating_sub(4).max(16);
+            let w = max_w.min(ideal_w).min(110);
+            return (w, max_h);
+        }
+    }
+
+    // 2. Check standard COLUMNS / LINES environment variables
+    if let (Ok(cols_str), Ok(lines_str)) = (std::env::var("COLUMNS"), std::env::var("LINES")) {
+        if let (Ok(cols), Ok(lines)) = (cols_str.parse::<u16>(), lines_str.parse::<u16>()) {
+            let max_h = lines.saturating_sub(24).min(lines * 45 / 100).max(6);
+            let ideal_w = (max_h as u32 * 26 / 10) as u16;
+            let max_w = cols.saturating_sub(6).max(16);
+            let w = max_w.min(ideal_w).min(110);
+            return (w, max_h);
+        }
+    }
+
+    // 3. Safe fallback default
+    (48, 12)
 }
 
 pub fn print_stats(
