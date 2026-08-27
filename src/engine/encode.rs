@@ -9,6 +9,7 @@ use std::fs;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
+#[allow(clippy::too_many_arguments)]
 pub fn run_encoding(
     temp_raw: &Path,
     entry_dir: &Path,
@@ -31,7 +32,12 @@ pub fn run_encoding(
 
     let mut cmd = if which::which("nice").is_ok() && which::which("ionice").is_ok() {
         let mut c = Command::new("nice");
-        c.arg("-n").arg("19").arg("ionice").arg("-c").arg("3").arg("ffmpeg");
+        c.arg("-n")
+            .arg("19")
+            .arg("ionice")
+            .arg("-c")
+            .arg("3")
+            .arg("ffmpeg");
         c
     } else {
         Command::new("ffmpeg")
@@ -54,7 +60,9 @@ pub fn run_encoding(
         }
     }
 
-    if let Some(drawtext) = build_drawtext_filter(&timestamp, title_opt, overlay_cfg, &profile.resolution) {
+    if let Some(drawtext) =
+        build_drawtext_filter(&timestamp, title_opt, overlay_cfg, &profile.resolution)
+    {
         vf_parts.push(drawtext);
     }
 
@@ -122,7 +130,10 @@ pub fn run_encoding(
     if !status.success() {
         let _ = Notification::new()
             .summary("vj error")
-            .body(&format!("Encoding failed for {}. Check {:?}", timestamp, encode_log))
+            .body(&format!(
+                "Encoding failed for {}. Check {:?}",
+                timestamp, encode_log
+            ))
             .show();
         bail!("FFmpeg encoding failed for {}", timestamp);
     }
@@ -133,18 +144,21 @@ pub fn run_encoding(
     // Generate 2x2 storyboard thumbnail for instant terminal preview
     let thumb_file = entry_dir.join("thumb.jpg");
     let _ = Command::new("ffmpeg")
-        .arg("-loglevel").arg("error")
+        .arg("-loglevel")
+        .arg("error")
         .arg("-y")
-        .arg("-i").arg(&final_out)
-        .arg("-vf").arg("thumbnail=20,scale=160:120,tile=2x2")
-        .arg("-frames:v").arg("1")
+        .arg("-i")
+        .arg(&final_out)
+        .arg("-vf")
+        .arg("thumbnail=20,scale=160:120,tile=2x2")
+        .arg("-frames:v")
+        .arg("1")
         .arg(&thumb_file)
         .status();
 
     if do_encrypt {
         let auth = GpgAuth::from_config(config);
-        crypto::encrypt_file(&final_out, &auth)
-            .context("Failed to encrypt final video output")?;
+        crypto::encrypt_file(&final_out, &auth).context("Failed to encrypt final video output")?;
 
         if thumb_file.exists() {
             let _ = crypto::encrypt_file(&thumb_file, &auth);
@@ -215,6 +229,8 @@ pub fn spawn_detached_encoder(
         .stdout(Stdio::null())
         .stderr(Stdio::null());
 
-    let child = cmd.spawn().context("Failed to spawn background encoding process")?;
+    let child = cmd
+        .spawn()
+        .context("Failed to spawn background encoding process")?;
     Ok(child.id())
 }

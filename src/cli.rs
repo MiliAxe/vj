@@ -125,10 +125,18 @@ pub enum Commands {
         about = "Display storage, streaks, and activity contribution heatmap"
     )]
     Stats {
-        #[arg(short = 'm', long, help = "Number of months to display in activity heatmap (e.g. 3, 6, 12)")]
+        #[arg(
+            short = 'm',
+            long,
+            help = "Number of months to display in activity heatmap (e.g. 3, 6, 12)"
+        )]
         months: Option<u32>,
 
-        #[arg(short = 'y', long, help = "Display full 12 months (1 year) in activity heatmap")]
+        #[arg(
+            short = 'y',
+            long,
+            help = "Display full 12 months (1 year) in activity heatmap"
+        )]
         year: bool,
     },
 
@@ -189,14 +197,16 @@ pub enum Commands {
     },
 
     #[command(hide = true, name = "__peek")]
-    InternalPeek {
-        entry_id: String,
-    },
+    InternalPeek { entry_id: String },
 }
 
 #[derive(Args, Debug)]
 pub struct RecordArgs {
-    #[arg(short, long, help = "Compression profile (potato, compact, terry, balanced, hq, or custom)")]
+    #[arg(
+        short,
+        long,
+        help = "Compression profile (potato, compact, terry, balanced, hq, or custom)"
+    )]
     pub profile: Option<String>,
 
     #[arg(short, long, help = "Encrypt with GPG AES-256")]
@@ -220,22 +230,36 @@ pub struct RecordArgs {
     #[arg(long, aliases = ["no-bg"], help = "Encode in foreground instead of background")]
     pub wait: bool,
 
-    #[arg(short = 'D', long, help = "Enable microphone background noise suppression (afftdn)")]
+    #[arg(
+        short = 'D',
+        long,
+        help = "Enable microphone background noise suppression (afftdn)"
+    )]
     pub denoise: bool,
 
     #[arg(long, help = "Disable microphone background noise suppression")]
     pub no_denoise: bool,
 
-    #[arg(short = 'O', long, help = "Enable retro VHS/camcorder OSD date overlay")]
+    #[arg(
+        short = 'O',
+        long,
+        help = "Enable retro VHS/camcorder OSD date overlay"
+    )]
     pub overlay: bool,
 
     #[arg(long, help = "Disable retro OSD date overlay")]
     pub no_overlay: bool,
 
-    #[arg(long, help = "Retro OSD style (vhs_yellow, camcorder_white, green, amber, cyan)")]
+    #[arg(
+        long,
+        help = "Retro OSD style (vhs_yellow, camcorder_white, green, amber, cyan)"
+    )]
     pub overlay_style: Option<String>,
 
-    #[arg(long, help = "Retro OSD font (vt323, silkscreen, press_start_2p, share_tech_mono, or font path/name)")]
+    #[arg(
+        long,
+        help = "Retro OSD font (vt323, silkscreen, press_start_2p, share_tech_mono, or font path/name)"
+    )]
     pub overlay_font: Option<String>,
 
     #[arg(long, aliases = ["font-size"], help = "Retro OSD font size (default: auto proportional)")]
@@ -277,22 +301,36 @@ pub struct ImportArgs {
     #[arg(long, help = "Keep raw file in inbox")]
     pub keep: bool,
 
-    #[arg(short = 'D', long, help = "Enable microphone background noise suppression (afftdn)")]
+    #[arg(
+        short = 'D',
+        long,
+        help = "Enable microphone background noise suppression (afftdn)"
+    )]
     pub denoise: bool,
 
     #[arg(long, help = "Disable microphone background noise suppression")]
     pub no_denoise: bool,
 
-    #[arg(short = 'O', long, help = "Enable retro VHS/camcorder OSD date overlay")]
+    #[arg(
+        short = 'O',
+        long,
+        help = "Enable retro VHS/camcorder OSD date overlay"
+    )]
     pub overlay: bool,
 
     #[arg(long, help = "Disable retro OSD date overlay")]
     pub no_overlay: bool,
 
-    #[arg(long, help = "Retro OSD style (vhs_yellow, camcorder_white, green, amber, cyan)")]
+    #[arg(
+        long,
+        help = "Retro OSD style (vhs_yellow, camcorder_white, green, amber, cyan)"
+    )]
     pub overlay_style: Option<String>,
 
-    #[arg(long, help = "Retro OSD font (vt323, silkscreen, press_start_2p, share_tech_mono, or font path/name)")]
+    #[arg(
+        long,
+        help = "Retro OSD font (vt323, silkscreen, press_start_2p, share_tech_mono, or font path/name)"
+    )]
     pub overlay_font: Option<String>,
 
     #[arg(long, aliases = ["font-size"], help = "Retro OSD font size (default: auto proportional)")]

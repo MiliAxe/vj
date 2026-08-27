@@ -38,13 +38,9 @@ pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
 
     config.ensure_directories()?;
 
-    let profile_name = opts
-        .profile
-        .as_deref()
-        .unwrap_or(&config.default_profile);
+    let profile_name = opts.profile.as_deref().unwrap_or(&config.default_profile);
 
-    let (resolved_name, profile_spec) =
-        profile::resolve_profile(profile_name, &config.profiles);
+    let (resolved_name, profile_spec) = profile::resolve_profile(profile_name, &config.profiles);
 
     let do_encrypt = opts.encrypt.unwrap_or(config.auto_encrypt);
     let cal_sys = config.calendar_system();
@@ -291,7 +287,10 @@ pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
                 );
             }
             Err(e) => {
-                eprintln!("Failed to spawn background encoder: {}. Running in foreground...", e);
+                eprintln!(
+                    "Failed to spawn background encoder: {}. Running in foreground...",
+                    e
+                );
                 run_encoding(
                     &temp_raw,
                     &entry_folder,

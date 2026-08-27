@@ -16,9 +16,13 @@ impl GpgAuth {
             .ok();
 
         let pass = config.passphrase.clone().or(env_pass);
-        let key = config
-            .key_file_path()
-            .and_then(|p| if p.exists() { Some(p.to_string_lossy().to_string()) } else { None });
+        let key = config.key_file_path().and_then(|p| {
+            if p.exists() {
+                Some(p.to_string_lossy().to_string())
+            } else {
+                None
+            }
+        });
 
         Self {
             key_file: key,
@@ -52,8 +56,7 @@ pub fn encrypt_file<P: AsRef<Path>>(path: P, auth: &GpgAuth) -> Result<()> {
     }
 
     let mut cmd = Command::new("gpg");
-    cmd.arg("--batch")
-        .arg("--yes");
+    cmd.arg("--batch").arg("--yes");
     auth.apply_to_cmd(&mut cmd);
     cmd.arg("--symmetric")
         .arg("--cipher-algo")
@@ -84,13 +87,12 @@ pub fn decrypt_file<P1: AsRef<Path>, P2: AsRef<Path>>(
     }
 
     let mut cmd = Command::new("gpg");
-    cmd.arg("--batch")
-        .arg("--yes");
+    cmd.arg("--batch").arg("--yes");
     auth.apply_to_cmd(&mut cmd);
-    cmd.arg("--decrypt")
-        .arg(enc);
+    cmd.arg("--decrypt").arg(enc);
 
-    let out_file = fs::File::create(out).context("Failed to create destination file for decryption")?;
+    let out_file =
+        fs::File::create(out).context("Failed to create destination file for decryption")?;
     cmd.stdout(Stdio::from(out_file)).stderr(Stdio::null());
 
     let status = cmd.status().context("Failed to run gpg decryption")?;

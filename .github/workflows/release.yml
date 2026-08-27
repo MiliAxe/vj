@@ -60,11 +60,26 @@ jobs:
           tar -czvf ../${{ matrix.asset_name }}.tar.gz *
           cd ..
 
+      - name: Extract Release Notes from CHANGELOG
+        run: |
+          TAG="${{ github.event.inputs.tag_name || github.ref_name }}"
+          VERSION="${TAG#v}"
+          if [ -f CHANGELOG.md ]; then
+            awk -v ver="$VERSION" '
+              $0 ~ "^## \\[" ver "\\]" || $0 ~ "^## " ver { flag=1; next }
+              flag && /^## / { flag=0 }
+              flag { print }
+            ' CHANGELOG.md > RELEASE_NOTES.md
+          fi
+          if [ ! -s RELEASE_NOTES.md ]; then
+            echo "Release $TAG" > RELEASE_NOTES.md
+          fi
+
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
           files: ${{ matrix.asset_name }}.tar.gz
-          generate_release_notes: true
+          body_path: RELEASE_NOTES.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

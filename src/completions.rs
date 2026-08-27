@@ -301,7 +301,9 @@ pub fn print_custom_completion(shell_name: &str, cmd: &mut Command) {
 }
 
 pub fn install_completions() -> Result<()> {
-    let home = std::env::var("HOME").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from("."));
+    let home = std::env::var("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("."));
     println!("Installing shell completions with dynamic entry resolution...");
 
     // 1. Fish

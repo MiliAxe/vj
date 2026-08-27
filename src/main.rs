@@ -190,7 +190,8 @@ async fn main() -> Result<()> {
                         }
                         if meta_plain.exists() {
                             if let Ok(content) = fs::read_to_string(&meta_plain) {
-                                if let Ok(mut meta) = serde_json::from_str::<entry::Meta>(&content) {
+                                if let Ok(mut meta) = serde_json::from_str::<entry::Meta>(&content)
+                                {
                                     meta.encrypted = true;
                                     if let Ok(new_json) = serde_json::to_string_pretty(&meta) {
                                         let _ = fs::write(&meta_plain, new_json);
@@ -229,13 +230,15 @@ async fn main() -> Result<()> {
                             let _ = crypto::decrypt_file(&note_gpg, e.dir.join("note.md"), &auth);
                         }
                         if thumb_gpg.exists() {
-                            let _ = crypto::decrypt_file(&thumb_gpg, e.dir.join("thumb.jpg"), &auth);
+                            let _ =
+                                crypto::decrypt_file(&thumb_gpg, e.dir.join("thumb.jpg"), &auth);
                         }
                         if meta_gpg.exists() {
                             let meta_plain = e.dir.join("meta.json");
                             let _ = crypto::decrypt_file(&meta_gpg, &meta_plain, &auth);
                             if let Ok(content) = fs::read_to_string(&meta_plain) {
-                                if let Ok(mut meta) = serde_json::from_str::<entry::Meta>(&content) {
+                                if let Ok(mut meta) = serde_json::from_str::<entry::Meta>(&content)
+                                {
                                     meta.encrypted = false;
                                     if let Ok(new_json) = serde_json::to_string_pretty(&meta) {
                                         let _ = fs::write(&meta_plain, new_json);
@@ -277,11 +280,21 @@ async fn main() -> Result<()> {
                 println!("vj Compression Profiles:\n");
                 println!(
                     "{:<12} {:<18} {:<18} {:<18} {:<16} {:<16}",
-                    "PROFILE", "RESOLUTION & FPS", "VIDEO (AV1)", "AUDIO (OPUS)", "EST. (10 MIN)", "EST. (1 HOUR)"
+                    "PROFILE",
+                    "RESOLUTION & FPS",
+                    "VIDEO (AV1)",
+                    "AUDIO (OPUS)",
+                    "EST. (10 MIN)",
+                    "EST. (1 HOUR)"
                 );
                 println!(
                     "{:<12} {:<18} {:<18} {:<18} {:<16} {:<16}",
-                    "------------", "------------------", "------------------", "------------------", "----------------", "----------------"
+                    "------------",
+                    "------------------",
+                    "------------------",
+                    "------------------",
+                    "----------------",
+                    "----------------"
                 );
 
                 let builtins = profile::get_builtin_profiles();
@@ -304,11 +317,21 @@ async fn main() -> Result<()> {
                     println!("\nUser-Defined Profiles (from {:?}):", get_config_file());
                     println!(
                         "{:<12} {:<18} {:<18} {:<18} {:<16} {:<16}",
-                        "PROFILE", "RESOLUTION & FPS", "VIDEO (AV1)", "AUDIO (OPUS)", "EST. (10 MIN)", "EST. (1 HOUR)"
+                        "PROFILE",
+                        "RESOLUTION & FPS",
+                        "VIDEO (AV1)",
+                        "AUDIO (OPUS)",
+                        "EST. (10 MIN)",
+                        "EST. (1 HOUR)"
                     );
                     println!(
                         "{:<12} {:<18} {:<18} {:<18} {:<16} {:<16}",
-                        "------------", "------------------", "------------------", "------------------", "----------------", "----------------"
+                        "------------",
+                        "------------------",
+                        "------------------",
+                        "------------------",
+                        "----------------",
+                        "----------------"
                     );
                     for (name, p) in &config.profiles {
                         println!(
@@ -323,7 +346,10 @@ async fn main() -> Result<()> {
                     }
                 }
 
-                println!("\n(*) Default profile. Change with default_profile = \"...\" in {:?}", get_config_file());
+                println!(
+                    "\n(*) Default profile. Change with default_profile = \"...\" in {:?}",
+                    get_config_file()
+                );
             }
 
             Commands::Fonts => {
@@ -343,11 +369,19 @@ async fn main() -> Result<()> {
             Commands::Completions { target } => {
                 let mut cmd = Cli::command();
                 match target {
-                    CompletionTarget::Bash => completions::print_custom_completion("bash", &mut cmd),
+                    CompletionTarget::Bash => {
+                        completions::print_custom_completion("bash", &mut cmd)
+                    }
                     CompletionTarget::Zsh => completions::print_custom_completion("zsh", &mut cmd),
-                    CompletionTarget::Fish => completions::print_custom_completion("fish", &mut cmd),
-                    CompletionTarget::Powershell => completions::print_custom_completion("powershell", &mut cmd),
-                    CompletionTarget::Elvish => completions::print_custom_completion("elvish", &mut cmd),
+                    CompletionTarget::Fish => {
+                        completions::print_custom_completion("fish", &mut cmd)
+                    }
+                    CompletionTarget::Powershell => {
+                        completions::print_custom_completion("powershell", &mut cmd)
+                    }
+                    CompletionTarget::Elvish => {
+                        completions::print_custom_completion("elvish", &mut cmd)
+                    }
                     CompletionTarget::Install => completions::install_completions()?,
                 }
             }
@@ -370,8 +404,7 @@ async fn main() -> Result<()> {
                     .unwrap_or(&config.overlay_style)
                     .parse()
                     .unwrap_or_default();
-                let font = overlay_font
-                    .unwrap_or_else(|| config.overlay_font.clone());
+                let font = overlay_font.unwrap_or_else(|| config.overlay_font.clone());
                 let font_size = overlay_font_size.or(config.overlay_font_size);
 
                 let overlay_cfg = OverlayConfig {

@@ -94,37 +94,33 @@ pub fn print_recommended_fonts() {
     println!("{}", "vj Recommended Retro Fonts:".bold());
     println!();
     println!(
-        "{:<20} {:<24} {}",
-        "FONT IDENTIFIER", "STYLE / ERA", "DESCRIPTION"
+        "{:<20} {:<24} DESCRIPTION",
+        "FONT IDENTIFIER", "STYLE / ERA"
     );
     println!(
-        "{:<20} {:<24} {}",
-        "-------------------", "-----------------------", "----------------------------------------------"
+        "{:<20} {:<24} ----------------------------------------------",
+        "-------------------", "-----------------------"
     );
 
     println!(
-        "{:<20} {:<24} {}",
+        "{:<20} {:<24} Iconic tall retro VHS & CRT phosphor terminal font",
         "vt323 (*)".green(),
-        "DEC VT323 CRT / VHS",
-        "Iconic tall retro VHS & CRT phosphor terminal font"
+        "DEC VT323 CRT / VHS"
     );
     println!(
-        "{:<20} {:<24} {}",
+        "{:<20} {:<24} Ultra-crisp pixel matrix font, ideal for compact/potato",
         "silkscreen".yellow(),
-        "90s Handheld Camcorder",
-        "Ultra-crisp pixel matrix font, ideal for compact/potato"
+        "90s Handheld Camcorder"
     );
     println!(
-        "{:<20} {:<24} {}",
+        "{:<20} {:<24} Classic 1980s retro gaming & computer pixel typography",
         "press_start_2p".cyan(),
-        "8-Bit Arcade / Micro",
-        "Classic 1980s retro gaming & computer pixel typography"
+        "8-Bit Arcade / Micro"
     );
     println!(
-        "{:<20} {:<24} {}",
+        "{:<20} {:<24} Modern high-tech vintage monospace HUD display font",
         "share_tech_mono".magenta(),
-        "Cyberpunk HUD / Sci-Fi",
-        "Modern high-tech vintage monospace HUD display font"
+        "Cyberpunk HUD / Sci-Fi"
     );
 
     println!();

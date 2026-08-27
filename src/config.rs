@@ -212,7 +212,8 @@ impl Config {
     }
 
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let toml_str = toml::to_string_pretty(self).context("Failed to serialize config to TOML")?;
+        let toml_str =
+            toml::to_string_pretty(self).context("Failed to serialize config to TOML")?;
         fs::write(path, toml_str).context("Failed to write config file")?;
         Ok(())
     }

@@ -1,16 +1,11 @@
 use chrono::{DateTime, Datelike, Local, Timelike};
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CalendarSystem {
+    #[default]
     Jalali,
     Gregorian,
-}
-
-impl Default for CalendarSystem {
-    fn default() -> Self {
-        CalendarSystem::Jalali
-    }
 }
 
 impl fmt::Display for CalendarSystem {
@@ -36,10 +31,7 @@ impl std::str::FromStr for CalendarSystem {
 pub fn gregorian_to_jalali(gy: i32, gm: u32, gd: u32) -> (i32, u32, u32) {
     let g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
     let gy2 = if gm > 2 { gy } else { gy - 1 };
-    let mut days = 355666
-        + (365 * gy)
-        + ((gy2 + 3) / 4)
-        - ((gy2 + 99) / 100)
+    let mut days = 355666 + (365 * gy) + ((gy2 + 3) / 4) - ((gy2 + 99) / 100)
         + ((gy2 + 399) / 400)
         + (gd as i32)
         + g_d_m[(gm - 1) as usize];
@@ -57,7 +49,10 @@ pub fn gregorian_to_jalali(gy: i32, gm: u32, gd: u32) -> (i32, u32, u32) {
     let (jm, jd) = if days < 186 {
         (1 + (days / 31) as u32, 1 + (days % 31) as u32)
     } else {
-        (7 + ((days - 186) / 30) as u32, 1 + ((days - 186) % 30) as u32)
+        (
+            7 + ((days - 186) / 30) as u32,
+            1 + ((days - 186) % 30) as u32,
+        )
     };
 
     (jy, jm, jd)
@@ -103,9 +98,7 @@ pub fn jalali_to_gregorian(jy: i32, jm: u32, jd: u32) -> (i32, u32, u32) {
         sal_g = (sal_g - 1) % 365;
     }
 
-    let g_days_in_month = [
-        31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
-    ];
+    let g_days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
     let mut gm = 0;
     while gm < 12 && sal_g > g_days_in_month[gm] {
@@ -117,7 +110,10 @@ pub fn jalali_to_gregorian(jy: i32, jm: u32, jd: u32) -> (i32, u32, u32) {
 }
 
 /// Helper to parse an entry's ID or date string into a normalized Gregorian NaiveDate
-pub fn parse_entry_to_naive_date(id: &str, declared_cal: Option<&str>) -> Option<chrono::NaiveDate> {
+pub fn parse_entry_to_naive_date(
+    id: &str,
+    declared_cal: Option<&str>,
+) -> Option<chrono::NaiveDate> {
     let date_str = id.split('_').next()?;
     let parts: Vec<&str> = date_str.split('-').collect();
     if parts.len() < 3 {

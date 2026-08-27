@@ -212,12 +212,12 @@ pub fn print_list(entries: &[Entry], quiet: bool) {
     }
 
     println!(
-        "{:<22} {:<10} {:<8} {:<32} {}",
-        "ID / TIMESTAMP", "STATUS", "SIZE", "TITLE", "TAGS"
+        "{:<22} {:<10} {:<8} {:<32} TAGS",
+        "ID / TIMESTAMP", "STATUS", "SIZE", "TITLE"
     );
     println!(
-        "{:<22} {:<10} {:<8} {:<32} {}",
-        "----------------------", "----------", "--------", "--------------------------------", "----------------"
+        "{:<22} {:<10} {:<8} {:<32} ----------------",
+        "----------------------", "----------", "--------", "--------------------------------"
     );
 
     for e in entries {
@@ -315,11 +315,15 @@ fn render_entry_thumbnail(entry: &Entry, auth: &GpgAuth) {
     // 1. If plaintext thumb doesn't exist, try to generate it from video.mkv if present
     if !thumb_file.exists() && !thumb_gpg.exists() && v_plain.exists() {
         let _ = Command::new("ffmpeg")
-            .arg("-loglevel").arg("error")
+            .arg("-loglevel")
+            .arg("error")
             .arg("-y")
-            .arg("-i").arg(&v_plain)
-            .arg("-vf").arg("thumbnail=20,scale=160:120,tile=2x2")
-            .arg("-frames:v").arg("1")
+            .arg("-i")
+            .arg(&v_plain)
+            .arg("-vf")
+            .arg("thumbnail=20,scale=160:120,tile=2x2")
+            .arg("-frames:v")
+            .arg("1")
             .arg(&thumb_file)
             .status();
     }
@@ -365,8 +369,10 @@ fn render_entry_thumbnail(entry: &Entry, auth: &GpgAuth) {
         } else if let Ok(viu) = which::which("viu") {
             println!("\n{}", "--- Storyboard Preview ---".dimmed());
             let _ = Command::new(viu)
-                .arg("-w").arg(preview_w.to_string())
-                .arg("-h").arg(preview_h.to_string())
+                .arg("-w")
+                .arg(preview_w.to_string())
+                .arg("-h")
+                .arg(preview_h.to_string())
                 .arg(path)
                 .status();
         }
@@ -481,7 +487,7 @@ pub fn print_stats(
         while date_counts.contains_key(&curr) {
             current_streak += 1;
             streak_start_date = Some(curr);
-            curr = curr - Duration::days(1);
+            curr -= Duration::days(1);
         }
     }
 
@@ -508,7 +514,10 @@ pub fn print_stats(
     let effective_months = months.max(1);
     let total_days_window = (effective_months * 30) as i64;
     let window_start = today - Duration::days(total_days_window - 1);
-    let active_in_window = all_dates_set.iter().filter(|&&d| d >= window_start && d <= today).count();
+    let active_in_window = all_dates_set
+        .iter()
+        .filter(|&&d| d >= window_start && d <= today)
+        .count();
     let active_pct = (active_in_window as f64 / total_days_window as f64 * 100.0).round() as u32;
 
     println!("\nStreaks:");
@@ -663,8 +672,8 @@ fn render_contribution_heatmap(
     println!("{}", header_str.trim_end().dimmed());
 
     // 7 rows for each day of the week
-    for r in 0..7 {
-        let mut row_str = format!("{:<4} ", day_labels[r]);
+    for (r, label) in day_labels.iter().enumerate() {
+        let mut row_str = format!("{:<4} ", label);
         for w in 0..total_weeks {
             let day_date = grid_start_date + Duration::days((w * 7 + r) as i64);
             if day_date > today {
@@ -691,7 +700,6 @@ fn render_contribution_heatmap(
         "█".bold().bright_cyan()
     );
 }
-
 
 pub fn execute_delete(
     entry_ids: Vec<String>,
@@ -756,7 +764,9 @@ pub fn execute_delete(
                 return Ok(());
             }
         } else {
-            anyhow::bail!("Please specify at least one entry ID to delete (e.g. vj delete <id1> <id2>)");
+            anyhow::bail!(
+                "Please specify at least one entry ID to delete (e.g. vj delete <id1> <id2>)"
+            );
         }
     }
 
@@ -784,14 +794,23 @@ pub fn execute_delete(
 
     // Confirmation prompt (unless force is provided)
     if !force {
-        println!("The following {} entry/entries will be permanently deleted:", to_delete.len());
+        println!(
+            "The following {} entry/entries will be permanently deleted:",
+            to_delete.len()
+        );
         for e in &to_delete {
             println!("  - {}  {}", e.id.bold(), e.title().dimmed());
         }
         let prompt = if to_delete.len() == 1 {
-            format!("Are you sure you want to permanently delete '{}'?", to_delete[0].id)
+            format!(
+                "Are you sure you want to permanently delete '{}'?",
+                to_delete[0].id
+            )
         } else {
-            format!("Are you sure you want to permanently delete these {} entries?", to_delete.len())
+            format!(
+                "Are you sure you want to permanently delete these {} entries?",
+                to_delete.len()
+            )
         };
         let confirmed = Confirm::new()
             .with_prompt(prompt)
@@ -840,7 +859,10 @@ mod tests {
 
         // Delete e1 and e2 with force=true
         execute_delete(
-            vec!["1405-01-01_10-00-00".to_string(), "1405-01-02_10-00-00".to_string()],
+            vec![
+                "1405-01-01_10-00-00".to_string(),
+                "1405-01-02_10-00-00".to_string(),
+            ],
             true,
             &entries_dir,
             &temp_dir,

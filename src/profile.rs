@@ -19,6 +19,7 @@ pub struct Profile {
 }
 
 impl Profile {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         resolution: &str,
         fps: u32,
@@ -176,8 +177,5 @@ pub fn resolve_profile(
     }
 
     // Fallback to terry
-    (
-        "terry".to_string(),
-        builtins.get("terry").unwrap().clone(),
-    )
+    ("terry".to_string(), builtins.get("terry").unwrap().clone())
 }

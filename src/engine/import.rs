@@ -70,7 +70,10 @@ pub fn preview_inbox_item(file: &Path, cal: CalendarSystem) -> Result<()> {
     }
 
     println!("================ INBOX VIDEO PREVIEW ================");
-    println!("File:         {}", file.file_name().unwrap_or_default().to_string_lossy());
+    println!(
+        "File:         {}",
+        file.file_name().unwrap_or_default().to_string_lossy()
+    );
     if let Ok(m) = fs::metadata(file) {
         let sz = m.len();
         let size_str = if sz >= 1024 * 1024 * 1024 {
@@ -231,13 +234,9 @@ pub fn execute_import(opts: ImportOptions, config: &Config) -> Result<()> {
         return Ok(());
     }
 
-    let profile_name = opts
-        .profile
-        .as_deref()
-        .unwrap_or(&config.default_profile);
+    let profile_name = opts.profile.as_deref().unwrap_or(&config.default_profile);
 
-    let (resolved_name, profile_spec) =
-        profile::resolve_profile(profile_name, &config.profiles);
+    let (resolved_name, profile_spec) = profile::resolve_profile(profile_name, &config.profiles);
 
     let do_encrypt = opts.encrypt.unwrap_or(config.auto_encrypt);
     let auth = GpgAuth::from_config(config);
@@ -288,7 +287,11 @@ pub fn execute_import(opts: ImportOptions, config: &Config) -> Result<()> {
         let mut entry_folder = config.entries_path().join(&timestamp);
         let mut count = 1;
         while entry_folder.exists() {
-            timestamp = format!("{}_{}", get_video_creation_timestamp(raw_file, cal_sys), count);
+            timestamp = format!(
+                "{}_{}",
+                get_video_creation_timestamp(raw_file, cal_sys),
+                count
+            );
             entry_folder = config.entries_path().join(&timestamp);
             count += 1;
         }
@@ -304,7 +307,13 @@ pub fn execute_import(opts: ImportOptions, config: &Config) -> Result<()> {
         let mut this_open_note = opts.note;
 
         if opts.interactive && std::io::stdin().is_terminal() {
-            println!("\n--- Configuring: {} (Date: {}) [{}/{}] ---", bname, timestamp, idx + 1, total);
+            println!(
+                "\n--- Configuring: {} (Date: {}) [{}/{}] ---",
+                bname,
+                timestamp,
+                idx + 1,
+                total
+            );
             let input_title: String = Input::new()
                 .with_prompt(format!("Title [press enter for 'Imported: {}']", bname))
                 .allow_empty(true)
@@ -366,11 +375,19 @@ pub fn execute_import(opts: ImportOptions, config: &Config) -> Result<()> {
         let meta_json = serde_json::to_string_pretty(&meta)?;
         fs::write(&meta_file, meta_json)?;
 
-        println!("Compressing [{}] {} -> {}...", resolved_name, bname, timestamp);
+        println!(
+            "Compressing [{}] {} -> {}...",
+            resolved_name, bname, timestamp
+        );
 
         let mut cmd = if which::which("nice").is_ok() && which::which("ionice").is_ok() {
             let mut c = Command::new("nice");
-            c.arg("-n").arg("19").arg("ionice").arg("-c").arg("3").arg("ffmpeg");
+            c.arg("-n")
+                .arg("19")
+                .arg("ionice")
+                .arg("-c")
+                .arg("3")
+                .arg("ffmpeg");
             c
         } else {
             Command::new("ffmpeg")
@@ -393,7 +410,12 @@ pub fn execute_import(opts: ImportOptions, config: &Config) -> Result<()> {
             }
         }
 
-        if let Some(drawtext) = build_drawtext_filter(&timestamp, Some(&title_val), &overlay_cfg, &profile_spec.resolution) {
+        if let Some(drawtext) = build_drawtext_filter(
+            &timestamp,
+            Some(&title_val),
+            &overlay_cfg,
+            &profile_spec.resolution,
+        ) {
             vf_parts.push(drawtext);
         }
 

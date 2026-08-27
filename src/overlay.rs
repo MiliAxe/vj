@@ -1,20 +1,15 @@
 use crate::fonts;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum OverlayStyle {
+    #[default]
     VhsYellow,
     CamcorderWhite,
     Green,
     Amber,
     Cyan,
-}
-
-impl Default for OverlayStyle {
-    fn default() -> Self {
-        OverlayStyle::VhsYellow
-    }
 }
 
 impl std::str::FromStr for OverlayStyle {
@@ -121,7 +116,14 @@ pub fn build_drawtext_filter(
 
         filters.push(format!(
             "drawtext={}:text='{}':fontcolor={}:fontsize={}:x={}:y=h-th-{}-{}:{}",
-            font_param, escaped_title, fontcolor, title_font_size, margin, margin, line_spacing, stroke_opts
+            font_param,
+            escaped_title,
+            fontcolor,
+            title_font_size,
+            margin,
+            margin,
+            line_spacing,
+            stroke_opts
         ));
     }
 
