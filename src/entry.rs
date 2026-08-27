@@ -7,7 +7,7 @@ use dialoguer::Confirm;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use std::fs;
-use std::io::IsTerminal;
+use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -341,10 +341,16 @@ fn render_entry_thumbnail(entry: &Entry, auth: &GpgAuth) {
     };
 
     if let Some(ref path) = target_thumb {
+        // Clear any previous Kitty GPU image placements to prevent ghosting/multiplying
+        print!("\x1b_Ga=d,d=A\x1b\\");
+        let _ = std::io::stdout().flush();
+
         if let Ok(chafa) = which::which("chafa") {
             println!("\n{}", "--- Storyboard Preview ---".dimmed());
             let _ = Command::new(chafa)
                 .arg("--size=38x13")
+                .arg("--passthrough=none")
+                .arg("--animate=off")
                 .arg(path)
                 .status();
         } else if let Ok(timg) = which::which("timg") {
