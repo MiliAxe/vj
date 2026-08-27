@@ -30,16 +30,62 @@ This project is inspired by the King himself, [Terry A. Davis](https://en.wikipe
 
 ---
 
-## Installation
+## Prerequisites
+
+`vj` is designed and tested for **GNU/Linux** and relies on standard CLI tools for video capture, rendering, and security:
+
+- **`ffmpeg`** *(compiled with `libsvtav1`, `libopus`, `afftdn`, `drawtext`)* — video capture, audio filters, and AV1 encoding
+- **`mpv`** — smooth, zero-disk RAM-streamed video playback
+- **`fzf`** — interactive TUI navigation and multi-select deletion
+- **`gnupg`** *(optional)* — AES-256 encrypted vault management
+- **`chafa`** *(or `timg` / `viu`)* — terminal cell storyboard rendering
+
+Install dependencies via your package manager:
 
 ```bash
-# Clone and enter the repository
+# Arch Linux
+sudo pacman -S ffmpeg mpv fzf gnupg chafa
+
+# Ubuntu / Debian
+sudo apt update && sudo apt install ffmpeg mpv fzf gnupg chafa
+
+# Fedora
+sudo dnf install ffmpeg mpv fzf gnupg chafa
+```
+
+---
+
+## Installation
+
+> [!NOTE]
+> `vj` is currently tested and built for **GNU/Linux** environments (`x86_64` and `aarch64`).
+
+### Method 1: Pre-Built Binary Tarball (Fastest)
+
+Download the latest release tarball directly from GitHub Releases:
+
+```bash
+# For x86_64 Linux:
+curl -sSL https://github.com/MiliAxe/vj-rs/releases/latest/download/vj-linux-x86_64.tar.gz | tar -xz -C ~/.local/bin
+
+# For aarch64 (ARM64) Linux:
+curl -sSL https://github.com/MiliAxe/vj-rs/releases/latest/download/vj-linux-aarch64.tar.gz | tar -xz -C ~/.local/bin
+
+# Install shell completions
+vj completions install
+```
+
+### Method 2: Build from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/MiliAxe/vj-rs.git
 cd vj-rs
 
-# Build and install to ~/.local/bin with shell completions
+# Compile and install to ~/.local/bin with completions
 make install
 
-# System-wide install (optional)
+# Or system-wide install (optional)
 sudo make install PREFIX=/usr/local
 ```
 
@@ -48,6 +94,28 @@ To uninstall:
 ```bash
 make uninstall
 ```
+
+---
+
+## Vault & Entry Structure
+
+`vj` stores each entry in a self-contained, human-readable timestamp folder under your journal directory (`~/Videos/Journal/entries` by default):
+
+```
+~/Videos/Journal/
+├── entries/
+│   ├── 1405-06-04_12-33-03/
+│   │   ├── video.mkv         # Compressed SVT-AV1 + Opus video (or video.mkv.gpg)
+│   │   ├── thumb.jpg         # 2x2 storyboard contact sheet (or thumb.jpg.gpg)
+│   │   ├── meta.json         # Profile, resolution, fps, tags, timestamp (or meta.json.gpg)
+│   │   └── note.md           # Markdown notes written during/after recording (or note.md.gpg)
+│   └── 1405-06-05_18-20-00/
+│       └── ...
+└── inbox/                    # Drop zone for mobile uploads & external files to import
+```
+
+- **Zero Plaintext on Disk**: When encrypted, video streams are decrypted in-memory and piped directly into `mpv` (`gpg -d | mpv -`) without writing plaintext video to disk.
+- **Asynchronous Compression**: New recordings are captured instantly to a temporary buffer and compressed in the background via low I/O and CPU scheduling (`nice` & `ionice`), leaving your terminal immediately available.
 
 ---
 
@@ -133,6 +201,52 @@ vj record -O --overlay-font silkscreen --overlay-style camcorder_white --font-si
 | **`vj fonts`** | List recommended retro fonts and styles | `vj fonts` |
 | **`vj config`** | Open configuration in `$EDITOR` (`nvim`/`vim`) | `vj config` |
 | **`vj completions`** | Output or auto-install shell completions | `vj completions install` |
+
+---
+
+## Contribution Heatmap & Streak Tracking
+
+Track your daily journaling consistency directly inside your terminal (`vj stats`):
+
+```
+================== JOURNAL STATS ==================
+Location:       /home/mili/Videos/Journal/entries
+Inbox:          /home/mili/Videos/Journal/inbox
+Calendar:       jalali
+Total Entries:  24
+Plaintext:      24
+Encrypted:      0
+Storage:        192.4 MB
+Recorded Days:  18
+
+Streaks:
+  :: Current Streak: 4 days (1405-06-02 -> Today)
+  :: Longest Streak: 11 days
+  :: Active Days:    18 / 90 days (20%)
+
+Activity (Past 3 Months):
+     Kho   Tir       Mor     Sha
+Sat  ░ ░ ░ ░ ░ ░ ░ ░ ░ ░ ░ ░ ░ 
+Sun  ░ ░ ░ ░ ░ ░ ░ ░ ░ ░ ░ ░ ▒ 
+Mon  ░ ░ ░ ░ ░ ░ ░ ░ ░ ░ ░ ░ ▒ 
+Tue  ░ ░ ░ ░ ░ ░ ░ ░ ░ ░ ░ ░ ░ 
+Wed  ░ ░ ░ ░ ░ ░ ░ ░ ░ ░ ░ ░ ▓ 
+Thu  ░ ░ ░ ░ ░ ░ ░ ░ ░ ░ ░ ░   
+Fri  ░ ░ ░ ░ ░ ░ ░ ░ ░ ░ ░ ▒   
+
+Legend:  ░ 0  ▒ 1  ▓ 2  █ 3+
+```
+
+```bash
+# View 3 months (default)
+vj stats
+
+# View 6 months
+vj stats -m 6
+
+# View full 12 months (1 year)
+vj stats -y
+```
 
 ---
 
