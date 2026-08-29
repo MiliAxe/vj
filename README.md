@@ -172,6 +172,76 @@ vj record -O --overlay-font silkscreen --overlay-style camcorder_white --font-si
 
 ---
 
+## Lifecycle Hooks
+
+`vj` supports user-defined lifecycle hooks configured in `config.toml`. Every hook command runs via `sh -c` and receives the event payload both as `VJ_*` environment variables and as JSON on stdin.
+
+Available events:
+
+| Event | Fires when | Aborts on blocking failure |
+| :--- | :--- | :--- |
+| `pre_record` | Before ffmpeg capture starts | Yes — recording is cancelled |
+| `post_record` | After entry folder + meta.json are written | No |
+| `post_encode` | After AV1 encode (+ thumbnail + encryption) completes, including background encoders | No |
+| `post_import` | After each inbox file is imported | No |
+| `pre_play` | Before mpv launches | Yes — playback is cancelled |
+| `post_play` | After playback finishes | No |
+| `pre_delete` | Before an entry directory is removed | Yes — deletion is cancelled |
+| `post_delete` | After the entry directory is removed | No |
+
+Payload fields: `event`, `entry_id`, `entry_dir`, `profile`, `title`, `tags`, `encrypted`, `file` → available as `$VJ_EVENT`, `$VJ_ENTRY_ID`, `$VJ_ENTRY_DIR`, `$VJ_PROFILE`, `$VJ_TITLE`, `$VJ_TAGS`, `$VJ_ENCRYPTED`, `$VJ_FILE`.
+
+#### JSON on stdin
+
+In addition to the `$VJ_*` environment variables, every hook receives the **complete event payload as a single line of JSON piped to its stdin**. This makes hooks scriptable with standard tools (`jq`, Python, Node, ...) without fragile string parsing of shell variables:
+
+```json
+{"event":"post_encode","entry_id":"1405-06-04_12-33-03","entry_dir":"/home/user/Videos/Journal/entries/1405-06-04_12-33-03","profile":"terry","title":"Trip to Japan","tags":["dev","log"],"encrypted":true,"file":"/home/user/Videos/Journal/entries/1405-06-04_12-33-03/video.mkv.gpg"}
+```
+
+Example — using `jq` to read structured fields from stdin:
+
+```toml
+[[hooks.post_encode]]
+# Extract tags as a JSON array for downstream tooling
+run = "jq -r '.tags[]' >> \"$VJ_ENTRY_DIR/tag_index.txt\""
+```
+
+Notes on the payload format:
+- Fields that don't apply to an event are `null` (e.g. `file` is `null` for `pre_record`, since the video doesn't exist yet). The corresponding `$VJ_*` variable is set to an empty string for `null`.
+- Booleans arrive as JSON `true`/`false` on stdin and as the strings `true`/`false` in `$VJ_*` variables.
+- `tags` is a JSON array on stdin and a comma-separated string in `$VJ_TAGS`.
+
+#### Defining multiple hooks for one event
+
+The `[[hooks.<event>]]` syntax is a TOML **array of tables**: simply repeat the header once per hook. Every occurrence appends an independent hook, and they run **sequentially, top-to-bottom in file order**. Each hook gets its own `blocking` flag, so mixing fire-and-forget and gate-keeping hooks on the same event is fine:
+
+```toml
+# ~/.config/vj/config.toml
+
+[[hooks.post_encode]]
+run = "notify-send vj \"Entry $VJ_ENTRY_ID encoded\""
+
+[[hooks.post_encode]]
+run = "rclone copy \"$VJ_ENTRY_DIR\" remote:journal-backup >> /tmp/vj_sync.log 2>&1"
+
+[[hooks.post_encode]]
+# Transcribe new entries with whisper
+run = "whisper.cpp -m base.en \"$VJ_FILE\" > \"$VJ_ENTRY_DIR/transcript.txt\" &"
+```
+
+Ordering & failure semantics across multiple hooks:
+- Hooks execute one after another, in the order written above.
+- If any hook fails with a non-zero exit and `blocking = true`, dispatch stops immediately: the operation is aborted (for `pre_*` events) and **any remaining hooks for that event do not run**.
+- If a non-`blocking` hook fails, only a warning is printed — the remaining hooks still run.
+
+Inspect and debug hooks:
+
+```bash
+vj hooks                    # List all configured hooks
+vj hooks --test post_encode # Fire a test payload at every post_encode hook
+```
+
 ## Command Reference
 
 | Command | Description | Example |
@@ -187,6 +257,8 @@ vj record -O --overlay-font silkscreen --overlay-style camcorder_white --font-si
 | **`vj play <id>`** | Play specific entry directly in `mpv` | `vj play 1405-05-30_12-33-03` |
 | **`vj preview <id>`** | Print metadata, note, and terminal storyboard | `vj preview 1405-05-30_12-33-03` |
 | **`vj preview-inbox <file>`** | Inspect format, resolution, codec, and duration | `vj preview-inbox ~/video.mp4` |
+| **`vj hooks`** | List configured lifecycle hooks | `vj hooks` |
+| **`vj hooks --test <event>`** | Fire a test payload at an event's hooks | `vj hooks --test post_encode` |
 | **`vj list`** | List entries in formatted table (`-q` for raw IDs) | `vj list -q` |
 | **`vj random`** | Jump into a random historical recording | `vj random` |
 | **`vj delete`** | Interactive `fzf` multi-select browser to delete entries | `vj delete` |

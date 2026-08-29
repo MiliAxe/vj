@@ -28,7 +28,7 @@ impl Write for SafeStdout {
 pub fn get_fish_completion() -> &'static str {
     r#"# Fish completion for vj
 
-set -l commands record import inbox-server preview-inbox play preview list random encrypt decrypt delete stats profiles fonts config completions help
+set -l commands record import inbox-server preview-inbox play preview list random encrypt decrypt delete stats profiles fonts hooks config completions help
 
 complete -c vj -f
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a record -d "Record a new video entry"
@@ -45,6 +45,11 @@ complete -c vj -n "not __fish_seen_subcommand_from $commands" -a delete -d "Perm
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a stats -d "Show summary stats and storage"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a profiles -d "List available compression profiles"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a fonts -d "List recommended retro fonts for OSD"
+complete -c vj -n "not __fish_seen_subcommand_from $commands" -a hooks -d "List configured lifecycle hooks or test-fire one"
+
+# Hook events
+set -l hook_events pre_record post_record post_encode post_import pre_play post_play pre_delete post_delete
+complete -c vj -n "__fish_seen_subcommand_from hooks" -l test -x -a "$hook_events" -d "Fire a test payload for an event"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a config -d "Edit configuration file"
 complete -c vj -n "not __fish_seen_subcommand_from $commands" -a completions -d "Output or install shell completions"
 
@@ -89,10 +94,11 @@ pub fn get_bash_completion() -> &'static str {
     local cur prev words cword
     _init_completion || return
 
-    local commands="record play preview list random encrypt decrypt delete stats profiles fonts config import inbox-server preview-inbox completions help"
+    local commands="record play preview list random encrypt decrypt delete stats profiles fonts hooks config import inbox-server preview-inbox completions help"
     local profiles="potato compact terry balanced hq"
     local styles="vhs_yellow camcorder_white green amber cyan"
     local fonts="vt323 silkscreen press_start_2p share_tech_mono"
+    local hook_events="pre_record post_record post_encode post_import pre_play post_play pre_delete post_delete"
 
     if [[ $cword -eq 1 ]]; then
         COMPREPLY=( $(compgen -W "${commands}" -- "${cur}") )
@@ -150,6 +156,13 @@ pub fn get_bash_completion() -> &'static str {
         list|ls)
             COMPREPLY=( $(compgen -W "-q --quiet" -- "${cur}") )
             ;;
+        hooks|hook)
+            if [[ "${prev}" == "--test" ]]; then
+                COMPREPLY=( $(compgen -W "${hook_events}" -- "${cur}") )
+            else
+                COMPREPLY=( $(compgen -W "--test" -- "${cur}") )
+            fi
+            ;;
     esac
 }
 complete -F _vj_completions vj
@@ -182,6 +195,7 @@ _vj() {
         'stats:Display storage, streaks, and contribution heatmap'
         'profiles:List available compression profiles'
         'fonts:List recommended retro fonts for OSD'
+        'hooks:List configured lifecycle hooks or test-fire one'
         'config:Open configuration file in editor'
         'completions:Generate or install shell completion scripts'
     )
@@ -264,6 +278,10 @@ _vj() {
                 completions)
                     _arguments \
                         '1:shell:(bash zsh fish powershell elvish install)'
+                    ;;
+                hooks)
+                    _arguments \
+                        '--test[Fire a test payload for an event]:event:(pre_record post_record post_encode post_import pre_play post_play pre_delete post_delete)'
                     ;;
             esac
             ;;

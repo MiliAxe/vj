@@ -6,6 +6,7 @@ mod crypto;
 mod engine;
 mod entry;
 mod fonts;
+mod hooks;
 mod overlay;
 mod profile;
 mod server;
@@ -257,6 +258,7 @@ async fn main() -> Result<()> {
                     force,
                     &config.entries_path(),
                     &config.temp_path(),
+                    &config,
                 )?;
             }
 
@@ -355,6 +357,11 @@ async fn main() -> Result<()> {
             Commands::Fonts => {
                 fonts::print_recommended_fonts();
             }
+
+            Commands::Hooks { test } => match test {
+                Some(event) => hooks::test_fire(&config, &event)?,
+                None => hooks::list_hooks(&config),
+            },
 
             Commands::Config => {
                 let config_file = get_config_file();

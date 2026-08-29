@@ -79,6 +79,21 @@ pub fn execute_play(target: Option<String>, verbose: bool, config: &Config) -> R
         bail!("mpv is required for playback but was not found in PATH.");
     }
 
+    crate::hooks::dispatch_entry(
+        config,
+        "pre_play",
+        &entry.id,
+        &entry.dir,
+        entry.meta.as_ref().map(|m| m.profile.as_str()),
+        entry.meta.as_ref().map(|m| m.title.as_str()),
+        &entry
+            .meta
+            .as_ref()
+            .map(|m| m.tags.clone())
+            .unwrap_or_default(),
+        entry.is_encrypted,
+    )?;
+
     let auth = GpgAuth::from_config(config);
     let v_gpg = entry.dir.join("video.mkv.gpg");
     let v_plain = entry.dir.join("video.mkv");
@@ -149,6 +164,21 @@ pub fn execute_play(target: Option<String>, verbose: bool, config: &Config) -> R
     } else {
         bail!("Video file missing for entry {}", entry.id);
     }
+
+    crate::hooks::dispatch_entry(
+        config,
+        "post_play",
+        &entry.id,
+        &entry.dir,
+        entry.meta.as_ref().map(|m| m.profile.as_str()),
+        entry.meta.as_ref().map(|m| m.title.as_str()),
+        &entry
+            .meta
+            .as_ref()
+            .map(|m| m.tags.clone())
+            .unwrap_or_default(),
+        entry.is_encrypted,
+    )?;
 
     Ok(())
 }

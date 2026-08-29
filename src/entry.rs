@@ -706,6 +706,7 @@ pub fn execute_delete(
     force: bool,
     entries_path: &Path,
     temp_path: &Path,
+    config: &crate::config::Config,
 ) -> Result<()> {
     let entries = load_entries(entries_path, temp_path)?;
     if entries.is_empty() {
@@ -825,9 +826,39 @@ pub fn execute_delete(
 
     // Delete directories
     for entry in to_delete {
+        crate::hooks::dispatch_entry(
+            config,
+            "pre_delete",
+            &entry.id,
+            &entry.dir,
+            entry.meta.as_ref().map(|m| m.profile.as_str()),
+            entry.meta.as_ref().map(|m| m.title.as_str()),
+            &entry
+                .meta
+                .as_ref()
+                .map(|m| m.tags.clone())
+                .unwrap_or_default(),
+            entry.is_encrypted,
+        )?;
+
         fs::remove_dir_all(&entry.dir)
             .with_context(|| format!("Failed to delete entry directory {:?}", entry.dir))?;
         println!("[✓] Deleted entry '{}'", entry.id);
+
+        crate::hooks::dispatch_entry(
+            config,
+            "post_delete",
+            &entry.id,
+            &entry.dir,
+            entry.meta.as_ref().map(|m| m.profile.as_str()),
+            entry.meta.as_ref().map(|m| m.title.as_str()),
+            &entry
+                .meta
+                .as_ref()
+                .map(|m| m.tags.clone())
+                .unwrap_or_default(),
+            entry.is_encrypted,
+        )?;
     }
 
     Ok(())
@@ -866,6 +897,7 @@ mod tests {
             true,
             &entries_dir,
             &temp_dir,
+            &crate::config::Config::default(),
         )
         .unwrap();
 

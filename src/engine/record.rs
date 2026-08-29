@@ -59,6 +59,17 @@ pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
         resolved_name, profile_spec.resolution, profile_spec.fps, timestamp
     );
 
+    crate::hooks::dispatch_entry(
+        config,
+        "pre_record",
+        &timestamp,
+        &entry_folder,
+        Some(&resolved_name),
+        None,
+        &[],
+        do_encrypt,
+    )?;
+
     // Step 1: Capture with live preview via pipeline
     let mut ffmpeg_cmd = Command::new("ffmpeg");
     ffmpeg_cmd.arg("-hide_banner");
@@ -223,7 +234,7 @@ pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
         profile: resolved_name.clone(),
         resolution: Some(profile_spec.resolution.clone()),
         fps: Some(profile_spec.fps),
-        tags: parsed_tags,
+        tags: parsed_tags.clone(),
         encrypted: false,
     };
 
@@ -305,6 +316,17 @@ pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
             }
         }
     }
+
+    crate::hooks::dispatch_entry(
+        config,
+        "post_record",
+        &timestamp,
+        &entry_folder,
+        Some(&resolved_name),
+        Some(&final_title),
+        &parsed_tags,
+        do_encrypt,
+    )?;
 
     Ok(())
 }

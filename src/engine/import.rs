@@ -368,7 +368,7 @@ pub fn execute_import(opts: ImportOptions, config: &Config) -> Result<()> {
             profile: resolved_name.clone(),
             resolution: Some(profile_spec.resolution.clone()),
             fps: Some(profile_spec.fps),
-            tags: parsed_tags,
+            tags: parsed_tags.clone(),
             encrypted: false,
         };
 
@@ -501,6 +501,17 @@ pub fn execute_import(opts: ImportOptions, config: &Config) -> Result<()> {
         }
 
         println!("[✓] Imported {} -> {}", bname, entry_folder.display());
+
+        crate::hooks::dispatch_entry(
+            config,
+            "post_import",
+            &timestamp,
+            &entry_folder,
+            Some(&resolved_name),
+            Some(&title_val),
+            &parsed_tags,
+            do_encrypt,
+        )?;
     }
 
     use notify_rust::Notification;

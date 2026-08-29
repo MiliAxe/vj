@@ -186,6 +186,28 @@ pub fn run_encoding(
         .body(&format!("Finished encoding entry: {}", timestamp))
         .show();
 
+    let file_path = if do_encrypt {
+        entry_dir.join("video.mkv.gpg")
+    } else {
+        final_out.clone()
+    };
+    let _ = crate::hooks::dispatch(
+        config,
+        "post_encode",
+        &crate::hooks::payload(
+            "post_encode",
+            &[
+                ("entry_id", serde_json::json!(timestamp)),
+                (
+                    "entry_dir",
+                    serde_json::json!(entry_dir.display().to_string()),
+                ),
+                ("file", serde_json::json!(file_path.display().to_string())),
+                ("encrypted", serde_json::json!(do_encrypt)),
+            ],
+        ),
+    );
+
     Ok(())
 }
 

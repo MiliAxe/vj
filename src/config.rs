@@ -66,6 +66,12 @@ pub struct Config {
 
     #[serde(default)]
     pub profiles: HashMap<String, Profile>,
+
+    /// Lifecycle hooks: event name -> list of hook commands.
+    /// Events: pre_record, post_record, post_encode, post_import,
+    ///         pre_play, post_play, pre_delete, post_delete
+    #[serde(default = "default_hooks")]
+    pub hooks: crate::hooks::HookMap,
 }
 
 fn default_stats_months() -> u32 {
@@ -124,6 +130,10 @@ fn default_inbox_port() -> u16 {
     8080
 }
 
+fn default_hooks() -> crate::hooks::HookMap {
+    HashMap::new()
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -148,6 +158,7 @@ impl Default for Config {
             passphrase: None,
             extra_ffmpeg_flags: None,
             profiles: HashMap::new(),
+            hooks: HashMap::new(),
         }
     }
 }

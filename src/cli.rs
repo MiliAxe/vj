@@ -162,6 +162,16 @@ pub enum Commands {
     Fonts,
 
     #[command(
+        name = "hooks",
+        aliases = ["hook"],
+        about = "List configured lifecycle hooks (or test-fire one with --test)"
+    )]
+    Hooks {
+        #[arg(long, help = "Fire a test payload for an event (e.g. post_encode)")]
+        test: Option<String>,
+    },
+
+    #[command(
         name = "completions",
         aliases = ["completion"],
         about = "Generate or install shell completion scripts"
