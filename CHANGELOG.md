@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-09-01
+
+### Added
+- **Lifecycle Hook System**: User-defined shell hooks for `pre_record`, `post_record`, `post_encode`, `post_import`, `pre_play`, `post_play`, `pre_delete`, and `post_delete` events, configured via `[[hooks.<event>]]` tables in `config.toml`. Hooks receive the event payload as `VJ_*` environment variables and JSON on stdin; `blocking = true` hooks can abort operations. Includes `vj hooks` listing and `vj hooks --test <event>` dry-run firing.
+- **Dynamic Terminal Preview Sizing**: Storyboard thumbnail layout and preview image resolution automatically adjust based on active terminal window dimensions.
+
+### Fixed
+- **Kitty Terminal Preview Artifacts**: Resolved image ghosting and persistence issues when rendering storyboard previews in Kitty terminal graphics protocol.
+
 ## [0.1.0] - 2026-08-26
 
 ### Added
@@ -21,6 +30,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Mobile Inbox HTTP Web Server**: Built-in async web server with QR code generation for uploading recordings from mobile phones (`vj inbox-server`).
 - **Automated Shell Completions**: Shell completions for Fish, Bash, Zsh, PowerShell, and Elvish.
 - **Linux Multi-Arch Release CI**: Cross-compilation workflow building standalone binaries for `x86_64` and `aarch64`.
-
-### Added (Unreleased)
-- **Lifecycle Hook System**: User-defined shell hooks for `pre_record`, `post_record`, `post_encode`, `post_import`, `pre_play`, `post_play`, `pre_delete`, and `post_delete` events, configured via `[[hooks.<event>]]` tables in `config.toml`. Hooks receive the event payload as `VJ_*` environment variables and JSON on stdin; `blocking = true` hooks can abort operations. Includes `vj hooks` listing and `vj hooks --test <event>` dry-run firing.
