@@ -160,7 +160,47 @@ pub fn execute_play(target: Option<String>, verbose: bool, config: &Config) -> R
         let mut child = mpv_cmd.spawn().context("Failed to start mpv player")?;
         let _ = child.wait();
     } else if entry.is_encoding {
-        println!("Video file is still compressing in the background.");
+        if crate::engine::encode::is_encoding_active(&entry.dir) {
+            println!("Video file is actively compressing in the background. Please wait a moment.");
+            return Ok(());
+        }
+        let raw_temp = config.temp_path().join(format!("raw_{}.mkv", entry.id));
+        if raw_temp.exists() {
+            println!("Background encoding was interrupted. Finishing compression now...");
+            let profile_name = entry
+                .meta
+                .as_ref()
+                .map(|m| m.profile.as_str())
+                .unwrap_or(&config.default_profile);
+            let (_, profile_spec) = crate::profile::resolve_profile(profile_name, &config.profiles);
+            let overlay_cfg = crate::overlay::OverlayConfig {
+                enabled: false,
+                style: crate::overlay::OverlayStyle::VhsYellow,
+                font: config.overlay_font.clone(),
+                font_size: config.overlay_font_size,
+                show_title: false,
+            };
+            let title_opt = entry.meta.as_ref().map(|m| m.title.as_str());
+            let do_encrypt = entry
+                .meta
+                .as_ref()
+                .map(|m| m.encrypted)
+                .unwrap_or(config.auto_encrypt);
+            crate::engine::encode::run_encoding(
+                &raw_temp,
+                &entry.dir,
+                &profile_spec,
+                do_encrypt,
+                &overlay_cfg,
+                title_opt,
+                config,
+                config.denoise,
+                verbose,
+            )?;
+            return execute_play(Some(entry.id.clone()), verbose, config);
+        } else {
+            println!("Video file is still compressing in the background.");
+        }
     } else {
         bail!("Video file missing for entry {}", entry.id);
     }

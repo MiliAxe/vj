@@ -38,6 +38,7 @@ pub struct Entry {
     pub dir: PathBuf,
     pub is_encrypted: bool,
     pub is_encoding: bool,
+    pub is_encoding_active: bool,
     #[allow(dead_code)]
     pub video_path: Option<PathBuf>,
     pub size_bytes: u64,
@@ -59,6 +60,7 @@ impl Entry {
 
         let is_encrypted = v_gpg.exists();
         let is_encoding = raw_temp.exists() && !v_plain.exists() && !v_gpg.exists();
+        let is_encoding_active = is_encoding && crate::engine::encode::is_encoding_active(&dir);
 
         let (video_path, size_bytes) = if is_encrypted {
             let sz = fs::metadata(&v_gpg).map(|m| m.len()).unwrap_or(0);
@@ -85,6 +87,7 @@ impl Entry {
             dir,
             is_encrypted,
             is_encoding,
+            is_encoding_active,
             video_path,
             size_bytes,
             meta,
@@ -93,7 +96,11 @@ impl Entry {
 
     pub fn formatted_size(&self) -> String {
         if self.is_encoding {
-            return "(enc...)".to_string();
+            return if self.is_encoding_active {
+                "(enc...)".to_string()
+            } else {
+                "(stalled)".to_string()
+            };
         }
         let bytes = self.size_bytes;
         if bytes >= 1024 * 1024 * 1024 {
@@ -299,7 +306,11 @@ pub fn print_preview(entry: &Entry, auth: &GpgAuth) -> Result<()> {
             }
         }
     } else if entry.is_encoding {
-        println!("Status:       Compressing in background...");
+        if entry.is_encoding_active {
+            println!("Status:       Compressing in background...");
+        } else {
+            println!("Status:       Encoding interrupted (run 'vj play' to resume)");
+        }
     }
 
     render_entry_thumbnail(entry, auth);

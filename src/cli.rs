@@ -246,7 +246,12 @@ pub struct RecordArgs {
     #[arg(short, long, help = "Interactive prompt for title and note")]
     pub interactive: bool,
 
-    #[arg(long, aliases = ["no-bg"], help = "Encode in foreground instead of background")]
+    #[arg(
+        short = 'w',
+        long,
+        aliases = ["no-bg"],
+        help = "Encode in foreground instead of background"
+    )]
     pub wait: bool,
 
     #[arg(

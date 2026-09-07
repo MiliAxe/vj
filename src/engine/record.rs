@@ -239,7 +239,7 @@ pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
         resolution: Some(profile_spec.resolution.clone()),
         fps: Some(profile_spec.fps),
         tags: parsed_tags.clone(),
-        encrypted: false,
+        encrypted: do_encrypt,
     };
 
     let meta_json = serde_json::to_string_pretty(&meta).context("Failed to serialize meta.json")?;

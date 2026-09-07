@@ -1827,6 +1827,7 @@ dependencies = [
  "clap_complete",
  "colored",
  "dialoguer",
+ "libc",
  "local-ip-address",
  "notify-rust",
  "qrcode",

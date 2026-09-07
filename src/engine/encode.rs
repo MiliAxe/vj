@@ -208,7 +208,26 @@ pub fn run_encoding(
         ),
     );
 
+    let _ = fs::remove_file(entry_dir.join(".encode.pid"));
+
     Ok(())
+}
+
+pub fn is_encoding_active(entry_dir: &Path) -> bool {
+    let pid_file = entry_dir.join(".encode.pid");
+    if let Ok(content) = fs::read_to_string(&pid_file) {
+        if let Ok(pid) = content.trim().parse::<u32>() {
+            #[cfg(unix)]
+            unsafe {
+                return libc::kill(pid as i32, 0) == 0;
+            }
+            #[cfg(not(unix))]
+            {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 pub fn spawn_detached_encoder(
@@ -247,6 +266,16 @@ pub fn spawn_detached_encoder(
         }
     }
 
+    #[cfg(unix)]
+    unsafe {
+        use std::os::unix::process::CommandExt;
+        cmd.pre_exec(|| {
+            libc::setsid();
+            libc::signal(libc::SIGHUP, libc::SIG_IGN);
+            Ok(())
+        });
+    }
+
     cmd.stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -254,5 +283,7 @@ pub fn spawn_detached_encoder(
     let child = cmd
         .spawn()
         .context("Failed to spawn background encoding process")?;
-    Ok(child.id())
+    let pid = child.id();
+    let _ = fs::write(entry_dir.join(".encode.pid"), pid.to_string());
+    Ok(pid)
 }
