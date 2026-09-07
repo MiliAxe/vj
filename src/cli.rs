@@ -219,6 +219,15 @@ pub struct RecordArgs {
     )]
     pub profile: Option<String>,
 
+    #[arg(
+        short = 'c',
+        long = "camera",
+        num_args = 0..=1,
+        default_missing_value = "select",
+        help = "Select camera device (e.g. -c, -c 1, -c /dev/video0)"
+    )]
+    pub camera: Option<String>,
+
     #[arg(short, long, help = "Encrypt with GPG AES-256")]
     pub encrypt: bool,
 

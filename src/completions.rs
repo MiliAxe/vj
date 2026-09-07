@@ -59,6 +59,7 @@ function __fish_vj_entries
 end
 
 # Record & Import options
+complete -c vj -n "__fish_seen_subcommand_from record" -s c -l camera -d "Camera device (/dev/videoX, index, or interactive)"
 complete -c vj -n "__fish_seen_subcommand_from record import" -s p -l profile -x -a "potato compact terry balanced hq" -d "Compression profile"
 complete -c vj -n "__fish_seen_subcommand_from record import" -s e -l encrypt -d "Encrypt with GPG AES-256"
 complete -c vj -n "__fish_seen_subcommand_from record import" -l no-encrypt -d "Save unencrypted"
@@ -114,7 +115,7 @@ pub fn get_bash_completion() -> &'static str {
             elif [[ "${prev}" == "--overlay-font" ]]; then
                 COMPREPLY=( $(compgen -W "${fonts}" -- "${cur}") )
             else
-                COMPREPLY=( $(compgen -W "-p --profile -e --encrypt --no-encrypt -t --title --tags -n --note -i --interactive --wait --no-bg -D --denoise --no-denoise -O --overlay --no-overlay --overlay-style --overlay-font --font-size --overlay-font-size --overlay-title --no-overlay-title -v --verbose ${profiles}" -- "${cur}") )
+                COMPREPLY=( $(compgen -W "-p --profile -c --camera -e --encrypt --no-encrypt -t --title --tags -n --note -i --interactive --wait --no-bg -D --denoise --no-denoise -O --overlay --no-overlay --overlay-style --overlay-font --font-size --overlay-font-size --overlay-title --no-overlay-title -v --verbose ${profiles}" -- "${cur}") )
             fi
             ;;
         import)
@@ -213,6 +214,7 @@ _vj() {
                 record)
                     _arguments \
                         '(-p --profile)'{-p,--profile}'[Compression profile]:profile:(potato compact terry balanced hq)' \
+                        '(-c --camera)'{-c,--camera}'[Camera device path or index]:camera:' \
                         '(-e --encrypt)'{-e,--encrypt}'[Encrypt with GPG AES-256]' \
                         '--no-encrypt[Save unencrypted]' \
                         '(-t --title)'{-t,--title}'[Title of entry]:title:' \

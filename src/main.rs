@@ -1,4 +1,5 @@
 mod calendar;
+pub mod camera;
 mod cli;
 mod completions;
 mod config;
@@ -76,6 +77,7 @@ async fn main() -> Result<()> {
                     overlay_font: args.overlay_font,
                     overlay_font_size: args.overlay_font_size,
                     overlay_title: overlay_title_opt,
+                    camera: args.camera,
                 };
                 engine::record::execute_record(opts, &config)?;
             }

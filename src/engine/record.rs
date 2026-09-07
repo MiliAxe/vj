@@ -25,6 +25,7 @@ pub struct RecordOptions {
     pub overlay_font: Option<String>,
     pub overlay_font_size: Option<u32>,
     pub overlay_title: Option<bool>,
+    pub camera: Option<String>,
 }
 
 pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
@@ -51,12 +52,15 @@ pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
     let meta_file = entry_folder.join("meta.json");
     let note_file = entry_folder.join("note.md");
 
+    let camera_dev =
+        crate::camera::resolve_camera_device(opts.camera.as_deref(), &config.camera_dev)?;
+
     fs::create_dir_all(&entry_folder)
         .with_context(|| format!("Failed to create entry folder {:?}", entry_folder))?;
 
     println!(
-        "Recording [{}: {}@{}fps] -> {} (Close preview or press 'q' to stop)",
-        resolved_name, profile_spec.resolution, profile_spec.fps, timestamp
+        "Recording [{}: {}@{}fps on {}] -> {} (Close preview or press 'q' to stop)",
+        resolved_name, profile_spec.resolution, profile_spec.fps, camera_dev, timestamp
     );
 
     crate::hooks::dispatch_entry(
@@ -88,7 +92,7 @@ pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
         .arg("-video_size")
         .arg(&profile_spec.resolution)
         .arg("-i")
-        .arg(&config.camera_dev)
+        .arg(&camera_dev)
         .arg("-f")
         .arg("pulse")
         .arg("-i")

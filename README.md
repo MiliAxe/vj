@@ -247,6 +247,7 @@ vj hooks --test post_encode # Fire a test payload at every post_encode hook
 | Command | Description | Example |
 | :--- | :--- | :--- |
 | **`vj record`** | Start live webcam capture & preview | `vj record -p terry` |
+| **`vj record -c`** | Select camera interactively or by device path/index | `vj record -c` / `vj record -c 1` |
 | **`vj record -D`** | Record with microphone noise suppression (`afftdn`) | `vj record -D` |
 | **`vj record -t "..."`** | Record with title, tags, or notes | `vj record -t "Life Update" --tags "dev,log" -n` |
 | **`vj record -O`** | Record with retro OSD date/time overlay | `vj record -O --overlay-font silkscreen --font-size 20` |
