@@ -27,6 +27,7 @@ This project is inspired by the King himself, [Terry A. Davis](https://en.wikipe
 - **🗑️ Batch Deletion & Interactive `fzf` Vault Management**: Multi-select deletion with live preview panes (`vj delete`) or batch deletion by IDs (`vj delete id1 id2 ...`).
 - **⚙️ Modern TOML Configuration**: Clean XDG-standard configuration at `~/.config/vj/config.toml`.
 - **🐚 Auto Shell Completions**: Native completions for Fish, Bash, Zsh, PowerShell, and Elvish via `clap_complete`.
+- **🦄 Emacs & Org-Mode Integration**: Native [`vj.el`](https://github.com/MiliAxe/vj.el) package for clickable `vj:` hyperlinks, in-buffer storyboard previews, and recording directly inside Org-mode.
 
 ---
 
