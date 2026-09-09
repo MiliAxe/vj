@@ -172,7 +172,8 @@ pub fn execute_play(target: Option<String>, verbose: bool, config: &Config) -> R
                 .as_ref()
                 .map(|m| m.profile.as_str())
                 .unwrap_or(&config.default_profile);
-            let (_, profile_spec) = crate::profile::resolve_profile(profile_name, &config.profiles);
+            let (_, profile_spec) = crate::profile::resolve_profile(profile_name, &config.profiles)
+                .unwrap_or_else(|_| ("terry".into(), crate::profile::get_builtin_profiles().get("terry").unwrap().clone()));
             let overlay_cfg = crate::overlay::OverlayConfig {
                 enabled: false,
                 style: crate::overlay::OverlayStyle::VhsYellow,

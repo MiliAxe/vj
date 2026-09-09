@@ -1,3 +1,4 @@
+use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -157,7 +158,7 @@ pub fn get_builtin_profiles() -> HashMap<String, Profile> {
 pub fn resolve_profile(
     name: &str,
     custom_profiles: &HashMap<String, Profile>,
-) -> (String, Profile) {
+) -> Result<(String, Profile)> {
     let lower = name.to_lowercase();
     let lower_ref = lower.as_str();
 
@@ -168,14 +169,73 @@ pub fn resolve_profile(
     };
 
     if let Some(p) = custom_profiles.get(resolved_name) {
-        return (resolved_name.to_string(), p.clone());
+        return Ok((resolved_name.to_string(), p.clone()));
     }
 
     let builtins = get_builtin_profiles();
     if let Some(p) = builtins.get(resolved_name) {
-        return (resolved_name.to_string(), p.clone());
+        return Ok((resolved_name.to_string(), p.clone()));
     }
 
-    // Fallback to terry
-    ("terry".to_string(), builtins.get("terry").unwrap().clone())
+    let mut available: Vec<String> = builtins.keys().cloned().collect();
+    for k in custom_profiles.keys() {
+        if !available.contains(k) {
+            available.push(k.clone());
+        }
+    }
+    available.sort();
+
+    bail!(
+        "Profile '{}' not found. Available profiles: {}",
+        name,
+        available.join(", ")
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolve_builtin_profiles() {
+        let custom = HashMap::new();
+        assert!(resolve_profile("potato", &custom).is_ok());
+        assert!(resolve_profile("terry", &custom).is_ok());
+        assert!(resolve_profile("default", &custom).is_ok());
+    }
+
+    #[test]
+    fn test_resolve_custom_profile() {
+        let mut custom = HashMap::new();
+        custom.insert(
+            "screen".to_string(),
+            Profile::new(
+                "1920x1080",
+                30,
+                "libsvtav1",
+                8,
+                24,
+                "libopus",
+                2,
+                "64k",
+                None,
+                None,
+                None,
+                None,
+                None,
+            ),
+        );
+        let res = resolve_profile("screen", &custom);
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap().0, "screen");
+    }
+
+    #[test]
+    fn test_resolve_unknown_profile_errors() {
+        let custom = HashMap::new();
+        let res = resolve_profile("nonexistent", &custom);
+        assert!(res.is_err());
+        let err_msg = res.unwrap_err().to_string();
+        assert!(err_msg.contains("Profile 'nonexistent' not found"));
+    }
 }

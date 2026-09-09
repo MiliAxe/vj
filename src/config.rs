@@ -256,3 +256,31 @@ impl Config {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_custom_profile_parse() {
+        let toml_content = r#"
+default_profile = "potato"
+
+[profiles.screen]
+resolution = "1920x1080"
+fps = 5
+vcodec = "libsvtav1"
+vpreset = 8
+vcrf = 24
+acodec = "libopus"
+achannels = 2
+abitrate = "64k"
+vfilter = "fps=30"
+extra_flags = "-svtav1-params tune=0:screen-content-tools=1"
+"#;
+        let config: Result<Config, _> = toml::from_str(toml_content);
+        assert!(config.is_ok(), "Failed to parse: {:?}", config.err());
+        let cfg = config.unwrap();
+        assert!(cfg.profiles.contains_key("screen"));
+    }
+}

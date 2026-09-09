@@ -25,7 +25,13 @@ use std::process::Command;
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-    let config = Config::load().unwrap_or_default();
+    let config = match Config::load() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error in configuration file {:?}:\n  {}", get_config_file(), e);
+            std::process::exit(1);
+        }
+    };
 
     if let Some(cmd) = cli.command {
         match cmd {
@@ -407,7 +413,7 @@ async fn main() -> Result<()> {
                 overlay_font_size,
                 overlay_title,
             } => {
-                let (_, profile_spec) = profile::resolve_profile(&profile, &config.profiles);
+                let (_, profile_spec) = profile::resolve_profile(&profile, &config.profiles)?;
                 let style: OverlayStyle = overlay_style
                     .as_deref()
                     .unwrap_or(&config.overlay_style)
