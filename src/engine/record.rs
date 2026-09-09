@@ -85,14 +85,20 @@ pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
     }
 
     ffmpeg_cmd
+        .arg("-thread_queue_size")
+        .arg("1024")
         .arg("-f")
         .arg("v4l2")
+        .arg("-timestamps")
+        .arg("abs")
         .arg("-framerate")
         .arg(profile_spec.fps.to_string())
         .arg("-video_size")
         .arg(&profile_spec.resolution)
         .arg("-i")
         .arg(&camera_dev)
+        .arg("-thread_queue_size")
+        .arg("1024")
         .arg("-f")
         .arg("pulse")
         .arg("-i")
@@ -107,10 +113,14 @@ pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
         .arg("libx264")
         .arg("-preset")
         .arg("ultrafast")
+        .arg("-tune")
+        .arg("zerolatency")
         .arg("-crf")
         .arg("17")
         .arg("-c:a")
         .arg("pcm_s16le")
+        .arg("-flush_packets")
+        .arg("1")
         .arg(&temp_raw)
         .arg("-map")
         .arg("[preview_v]")
@@ -146,6 +156,11 @@ pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
     }
 
     ffplay_cmd
+        .arg("-fflags")
+        .arg("nobuffer")
+        .arg("-flags")
+        .arg("low_delay")
+        .arg("-framedrop")
         .arg("-window_title")
         .arg(format!("vj recording ({})", timestamp))
         .arg("-f")
