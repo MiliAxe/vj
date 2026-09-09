@@ -119,6 +119,8 @@ pub fn execute_record(opts: RecordOptions, config: &Config) -> Result<()> {
         .arg("17")
         .arg("-c:a")
         .arg("pcm_s16le")
+        .arg("-cluster_time_limit")
+        .arg("200")
         .arg("-flush_packets")
         .arg("1")
         .arg(&temp_raw)
